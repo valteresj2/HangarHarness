@@ -62,6 +62,8 @@ def build(session, agent) -> str:
     parts.append(f"\n\n# Environment\n- Working directory: {session.cwd}\n- Date: {datetime.date.today().isoformat()}\n"
                  + machine.describe(session.machine, session.shell_name))
     parts.append(project_instructions(session.cwd))
+    if session.cfg.get("system_append") and agent.role == "main":
+        parts.append("\n\n" + str(session.cfg["system_append"]).strip())
     if session.skills and agent.role != "verifier":
         parts.append("\n\n# Skills (call the skill tool to load one before using it)\n" + skills_mod.index(session.skills))
     if session.mcp.servers and agent.toolset == "all":

@@ -82,8 +82,9 @@ def _guard_write(ctx: Ctx, path: Path) -> None:
         raise ToolError("read-only mode: writing is disabled.")
     inside = any(str(path).lower().startswith(str(root).lower()) for root in (s.cwd, s.dir))
     if not inside or s.cfg["permission"] == "ask":
-        if not s.approve(f"Write to {path}?"):
-            raise ToolError(f"write to {path} was not approved (outside the working directory or denied by the user).")
+        if not s.approve(f"Write to {path}?", tool="write", args={"path": str(path)}, can_always=inside):
+            raise ToolError(f"write to {path} was not approved" + (f": {s.deny_message}" if s.deny_message
+                            else " (outside the working directory or denied by the user)."))
     s.backup(path)
 
 
@@ -245,14 +246,16 @@ def t_shell(ctx: Ctx, a: dict) -> str:
     s, cmd = ctx.session, a["command"]
     if s.cfg["permission"] == "readonly":
         raise ToolError("read-only mode: shell is disabled.")
-    if any(rx.search(cmd) for rx in KILL_BY_NAME) and not (s.cfg["permission"] == "ask" and s.approve("Kill processes BY NAME? " + cmd)):
+    if any(rx.search(cmd) for rx in KILL_BY_NAME) and not (
+            s.cfg["permission"] in ("ask", "edits") and s.approve("Kill processes BY NAME? " + cmd, tool="shell", args={"command": cmd}, can_always=False)):
         raise ToolError("blocked: this command kills processes by name, which would also kill unrelated programs on this machine. "
                         "The command was NOT run (none of it). Stop a server you started with process(action=\"kill\", id=...) "
                         "— start it with shell background=true — or kill one specific PID that you started.")
     risky = any(rx.search(cmd) for rx in DANGEROUS)
-    if risky or s.cfg["permission"] == "ask":
-        if not s.approve(f"Run {'RISKY ' if risky else ''}command?\n{cmd}"):
-            raise ToolError("command not approved" + (" (matched a destructive-command rule; needs explicit user approval)." if risky else "."))
+    if risky or s.cfg["permission"] in ("ask", "edits"):
+        if not s.approve(f"Run {'RISKY ' if risky else ''}command?\n{cmd}", tool="shell", args={"command": cmd}, can_always=not risky):
+            raise ToolError("command not approved" + (f": {s.deny_message}" if s.deny_message else
+                            " (matched a destructive-command rule; needs explicit user approval)." if risky else "."))
     timeout = min(600, max(1, int(a.get("timeout") or s.cfg["shell_timeout"])))
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "PAGER": "cat", "GIT_PAGER": "cat", "CI": "1",
            # `python -m hangar studio ...` must work from any working directory, and report its spend to this session
@@ -274,9 +277,10 @@ def t_shell(ctx: Ctx, a: dict) -> str:
                 f"Read its output with process(action=\"output\", id=\"{pid}\"); stop it with process(action=\"kill\", id=\"{pid}\").")
     p = subprocess.Popen([*s.shell_argv, cmd], cwd=str(s.cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          stdin=subprocess.DEVNULL, env=env, creationflags=flags)
+    s.current_proc = p
     try:
         raw, _ = p.communicate(timeout=timeout)
-        tail = f"[exit {p.returncode}]"
+        tail = f"[exit {p.returncode}]" if not s.abort.is_set() else "[interrupted by the user]"
         s.last_exit = p.returncode
     except subprocess.TimeoutExpired:
         s.last_exit = -1

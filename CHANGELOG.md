@@ -1,6 +1,12 @@
 # Changelog
 
-## Não lançado
+## v0.2.0
+
+- **Modo bridge** (`python -m hangar bridge`): o harness como motor de outro programa, por JSON em linhas no stdin/stdout.
+  Conversa multi-turno, pedidos de permissão estruturados (permitir, permitir sempre, negar com motivo), perguntas, interrupção,
+  troca de modelo e de modo entre turnos e retomada por id de sessão. É o que o app Agent Hangar Desktop usa.
+- Modo de permissão `edits` (edições na pasta sem perguntar; comandos ainda perguntam) e interrupção que cancela o stream do modelo e o comando em execução.
+- Evento `thinking` com o raciocínio do modelo; `model_info` e `system_append` configuráveis pelo hospedeiro; servidores MCP extras passados pelo hospedeiro.
 
 - **Estúdio** (`python -m hangar studio`): `screenshot`/`check` (navegador headless via DevTools, sem dependências), `video` (HTML/three.js para MP4
   quadro a quadro), `image` (modelos de imagem do OpenRouter) e `pptx` (PowerPoint nativo com texto editável).

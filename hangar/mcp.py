@@ -151,7 +151,8 @@ class MCPManager:
         self.cwd, self.bus = Path(cwd), bus
         self.servers: dict[str, MCPServer] = {}
 
-    def load(self) -> None:
+    def load(self, extra: dict | None = None) -> None:
+        """`extra` = servers handed in by a host application (same shape as the files: {name: {url|command, ...}})."""
         specs: dict = {}
         for p in (HOME / "mcp.json", self.cwd / ".mcp.json", self.cwd / ".hangar" / "mcp.json"):
             if p.is_file():
@@ -160,6 +161,7 @@ class MCPManager:
                 except (OSError, ValueError) as e:
                     if self.bus:
                         self.bus.emit("notice", level="warn", text=f"bad MCP config {p}: {e}")
+        specs.update(extra or {})
         if not specs:
             return
         self.servers = {n: MCPServer(n, s, self.cwd) for n, s in specs.items() if isinstance(s, dict) and not s.get("disabled")}

@@ -21,6 +21,7 @@ class Reply:
     content: str = ""
     tool_calls: list = field(default_factory=list)   # [{"id","name","arguments"(str)}]
     reasoning_details: list = field(default_factory=list)
+    reasoning: str = ""
     finish: str = ""
     usage: dict = field(default_factory=dict)
     ms: int = 0
@@ -50,6 +51,7 @@ class LLM:
     def __init__(self, cfg: dict, catalog, bus=None, session_id: str = ""):
         self.cfg, self.catalog, self.bus, self.session_id = cfg, catalog, bus, session_id
         self.timeout = 180
+        self.abort = None                                # threading.Event set by the session to cancel a stream
 
     # ------------------------------------------------------------------ public
     def chat(self, model: str, messages: list, tools: list | None = None, on_delta=None,
@@ -142,6 +144,8 @@ class LLM:
         try:
             with resp:
                 for raw in resp:
+                    if self.abort is not None and self.abort.is_set():
+                        raise LLMError("aborted", "interrupted by the user")
                     line = raw.decode("utf-8", "replace").strip()
                     if not line.startswith("data:"):
                         continue
@@ -165,8 +169,10 @@ class LLM:
                             if on_delta:
                                 on_delta(d["content"], "text")
                         r = d.get("reasoning") or d.get("reasoning_content")
-                        if r and on_delta:
-                            on_delta(r, "reasoning")
+                        if r:
+                            reply.reasoning += r
+                            if on_delta:
+                                on_delta(r, "reasoning")
                         _merge_details(reply.reasoning_details, d.get("reasoning_details"))
                         for tc in d.get("tool_calls") or []:
                             idx = tc.get("index", 0)

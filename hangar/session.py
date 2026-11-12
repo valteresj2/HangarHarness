@@ -6,6 +6,7 @@ import os
 import secrets
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -55,6 +56,12 @@ class Session:
         self.files: set[str] = set()
         self.edits_since_run = False
         self.last_exit: int | None = None
+        self.abort = threading.Event()             # set by the host to stop the turn in flight
+        self.always: set[str] = set()              # tools the user allowed for the rest of the session
+        self.channel = None                        # bridge mode: answers from the host (see bridge.py)
+        self.current_proc = None                   # the foreground shell command, so an interrupt can kill it
+        self.deny_message = ""
+        self.llm.abort = self.abort
         self.incomplete = ""
         self.sub_count = 0
         self.spill_n = 0
@@ -162,8 +169,16 @@ class Session:
         return self.totals["cost"] >= self.cfg["max_cost_usd"]
 
     def check_stop(self) -> None:
-        if (self.dir / "stop").exists():
+        if self.abort.is_set() or (self.dir / "stop").exists():
             raise Stopped("stopped by user")
+
+    def interrupt(self) -> None:
+        """Stop the turn in flight: the model stream, the running command and anything waiting on the user."""
+        self.abort.set()
+        p = self.current_proc
+        if p is not None and p.poll() is None:
+            from .tools import kill_tree
+            kill_tree(p)
 
     def cap(self, text: str, tool: str, limit: int = 0) -> str:
         """Tier-0 context economy: keep head+tail in context, park the full output on disk."""
@@ -186,6 +201,8 @@ class Session:
         ans: str | None = None
         if self.answers is not None:
             ans = self.answers.pop(0) if self.answers else None
+        elif self.interactive == "bridge" and self.channel is not None:
+            ans = (self.channel.wait(qid, self.abort) or {}).get("answer")
         elif self.interactive == "tty":
             try:
                 print(f"\n\033[33m? {question}\033[0m" + (f"\n  options: {' | '.join(options)}" if options else ""), file=sys.stderr)
@@ -211,7 +228,22 @@ class Session:
         self.bus.emit("answer", qid=qid, answer=ans)
         return ans
 
-    def approve(self, what: str) -> bool:
+    def approve(self, what: str, tool: str = "", args: dict | None = None, can_always: bool = True) -> bool:
+        """Ask the user before a consequential action. In bridge mode this is a structured permission request."""
+        self.deny_message = ""
+        if tool and can_always and tool in self.always:
+            return True
+        if self.interactive == "bridge" and self.channel is not None:
+            self.q_n += 1
+            qid = f"p{self.q_n}"
+            self.bus.emit("permission", qid=qid, tool=tool or "action", args=args or {}, title=what, can_always=bool(tool and can_always))
+            resp = self.channel.wait(qid, self.abort) or {"decision": "deny", "message": "interrupted"}
+            decision = str(resp.get("decision") or "deny")
+            self.bus.emit("permission_result", qid=qid, decision=decision)
+            if decision == "allow_always" and tool and can_always:
+                self.always.add(tool)
+            self.deny_message = str(resp.get("message") or "")
+            return decision in ("allow", "allow_always")
         ans = self.ask(what, ["yes", "no"], kind="approval")
         return bool(ans) and ans.strip().lower() in ("y", "yes", "s", "sim", "ok", "approve", "allow")
 

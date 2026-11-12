@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from . import prompts, tools as T
 from .context import Context
 from .llm import LLMError
+from .session import Stopped
 from .toolcall import coerce_args, parse_text_calls, repair_json, signature
 
 
@@ -115,6 +116,8 @@ class Agent:
                 self.ctx.observe(r.usage["prompt"])
                 return r
             except LLMError as e:
+                if e.kind == "aborted":
+                    raise Stopped("stopped by user") from None
                 if e.kind == "no_tools" and self.mode == "native":
                     self.mode = s.tool_mode[self.model] = "text"      # remembered for the whole session
                     self.messages[0]["content"] = prompts.build(s, self)
@@ -150,6 +153,9 @@ class Agent:
                     denied = s.hooks.pre_tool(self, name, args)
                     if denied:
                         raise T.ToolError(denied)
+                    if name.startswith("mcp") and s.cfg["permission"] in ("ask", "edits") and not s.approve(
+                            f"Call {name}?", tool=name, args=args):
+                        raise T.ToolError("not approved by the user" + (f": {s.deny_message}" if s.deny_message else "."))
                     raw = str(tool.fn(T.Ctx(s, self), args))
                     ok, out = True, s.cap(raw + s.hooks.post_tool(self, name, args, True, raw), name, tool.cap)
                 except T.ToolError as e:
@@ -159,7 +165,7 @@ class Agent:
         s.totals["tool_calls"] += 1
         s.totals["tool_errors"] += 0 if ok else 1
         s.bus.emit("tool_end", id=call["id"], name=name, agent=self.name, ok=ok, ms=int((time.time() - t0) * 1000),
-                   chars=len(out), preview=out[:1500])
+                   chars=len(out), preview=out[:1500], **({"output": out[:30000]} if s.interactive == "bridge" else {}))
         return ok, out
 
     def _run_calls(self, calls: list) -> list[str]:
@@ -176,9 +182,25 @@ class Agent:
         s = self.s
         if not self.messages:
             self.messages.append({"role": "system", "content": prompts.build(s, self)})
+        self._repair()
         self.messages.append({"role": "user", "content": user})
         self.goal = (user if isinstance(user, str) else next((p["text"] for p in user if p.get("type") == "text"), ""))[:400]
         return self._loop()
+
+    def _repair(self) -> None:
+        """A turn cut short may leave tool calls without results; providers reject that history, so close them."""
+        for i in range(len(self.messages) - 1, -1, -1):
+            m = self.messages[i]
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                done = {x.get("tool_call_id") for x in self.messages[i + 1:] if x.get("role") == "tool"}
+                missing = [tc["id"] for tc in m["tool_calls"] if tc["id"] not in done]
+                at = i + 1 + sum(1 for x in self.messages[i + 1:] if x.get("role") == "tool")
+                for k, tid in enumerate(missing):
+                    self.messages.insert(at + k, {"role": "tool", "tool_call_id": tid, "content": "[interrupted by the user before this tool finished]"})
+                return
+            if m.get("role") in ("assistant", "user"):
+                if m.get("role") == "assistant":
+                    return
 
     def _loop(self) -> str:
         s = self.s
@@ -199,6 +221,8 @@ class Agent:
             r = self._chat()
             text, native_calls, as_text = r.content or "", r.tool_calls, self.mode == "text"
             text = _TRAILING_MARK.sub("", text)        # stray control markers some models append (<CPA_DONE>, <|eot|>)
+            if getattr(r, "reasoning", "").strip():
+                s.bus.emit("thinking", text=r.reasoning.strip(), agent=self.name)
             calls, shown = [], text
             if native_calls and not as_text:
                 for i, tc in enumerate(native_calls):
@@ -255,7 +279,9 @@ class Agent:
                     self.messages.append({"role": "user", "content": "Your output was cut off by the length limit. Continue, using tools and smaller pieces."})
                     continue
                 # --- a final "answer" that is really a question goes to the user, like an ask_user call
-                if self.role == "main" and "ask_user" in self.toolmap and asked < 2 and text.rstrip().endswith("?"):
+                # (not in bridge mode: there the host is a chat, and the user simply answers in the next message)
+                if (self.role == "main" and "ask_user" in self.toolmap and asked < 2 and text.rstrip().endswith("?")
+                        and s.interactive != "bridge"):
                     asked += 1
                     ans = s.ask(text.strip()[-800:])
                     if ans:

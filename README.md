@@ -70,6 +70,26 @@ python -m hangar studio pptx deck.json deck.pptx                                
 - **Imagem**: padrão `google/gemini-3.1-flash-image` (cerca de US$ 0,07 por imagem); o gasto entra na conta da sessão.
 - Requisitos: Chrome ou Edge para captura/vídeo, ffmpeg para vídeo, chave do OpenRouter para imagem.
 
+## Modo bridge: o harness como motor de outro programa
+
+`python -m hangar bridge` mantém uma conversa por processo e fala JSON em linhas pelo stdin/stdout. É como o
+[Agent Hangar Desktop](https://github.com/valteresj2/hangar) roda sessões no Hangar Harness.
+
+```
+hospedeiro -> harness                                   harness -> hospedeiro
+{"type":"start", cwd, model, base_url, permission}      {"type":"ready", session, resumed, model, context_window}
+{"type":"user", text, attachments?, images?}            delta · thinking · assistant · tool_start · tool_end · plan · notice…
+{"type":"permission_response", qid, decision, message?} {"type":"permission", qid, tool, args, title, can_always}
+{"type":"answer", qid, answer}                          {"type":"question", qid, question, options}
+{"type":"interrupt"} · {"type":"set_options", ...}      {"type":"turn_end", status, cost, prompt, completion, cached, …}
+{"type":"close"}
+```
+
+- A chave da API vai na variável de ambiente `HANGAR_BRIDGE_KEY`, nunca numa mensagem.
+- `permission`: `ask` (pergunta antes de escrever e de rodar comandos), `edits` (só comandos perguntam), `auto`, `readonly` (modo plano).
+- `resume: <id>` no `start` continua a conversa de uma sessão anterior. O stdout carrega só o protocolo.
+- Testado de ponta a ponta contra um servidor falso em `tests/test_bridge.py`.
+
 ## Regras do projeto: ganchos e plugins
 
 Política do projeto fica em código, não em pedidos ao modelo. Em `hangar.toml`:
@@ -184,6 +204,7 @@ hangar/  agent.py (loop) · graph.py (workflows) · tools.py · toolcall.py (rep
          llm.py · models.py (catálogo/tiers) · media.py (multimodal) · mcp.py · skills.py · machine.py · session.py · events.py
          hooks.py (regras e plugins no loop) · lessons.py (lições entre sessões)
          studio.py + browser.py + pptx.py (peças visuais) · skills/ (5 skills embutidas)
+         bridge.py (motor para outros programas, protocolo stdio)
          server.py + ui.html + flow.js (dashboard e grafo ao vivo) · cli.py
 bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas complexas) · tasks_studio.py (análise de dados com 6 entregáveis) · run_bench.py (Hangar × modelos, e Claude Code)
 tests/   test_core.py · mcp_vault_server.py

@@ -247,6 +247,9 @@ def main(argv: list[str] | None = None) -> int:
     if os.name == "nt":
         os.system("")          # enable ANSI colours in the Windows console
     args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "bridge":                    # engine mode for a host application (stdin/stdout protocol)
+        from . import bridge
+        return bridge.main(args[1:])
     if args and args[0] == "studio":                    # production commands (screenshot, video, image, pptx)
         from . import studio
         return studio.main(args[1:])
@@ -260,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--planner")
         p.add_argument("--verifier")
         p.add_argument("--perception")
-        p.add_argument("--permission", choices=["auto", "ask", "readonly"])
+        p.add_argument("--permission", choices=["auto", "ask", "edits", "readonly"])
         p.add_argument("--max-steps", type=int)
         p.add_argument("--max-cost", type=float)
         p.add_argument("--effort", choices=["low", "medium", "high"])

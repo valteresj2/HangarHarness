@@ -117,7 +117,7 @@ class Hooks:
             if act == "deny":
                 self._log("pre_tool", "deny", name, msg)
                 return f"blocked by project policy: {msg}"
-            if act == "ask" and not self.s.approve(f"{msg}\n{name} {text[:600]}"):
+            if act == "ask" and not self.s.approve(f"{msg}\n{name} {text[:600]}", tool=name, args=args, can_always=False):
                 self._log("pre_tool", "deny", name, msg)
                 return f"not approved by the user: {msg}"
             if act == "run":

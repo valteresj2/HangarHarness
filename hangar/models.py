@@ -69,6 +69,8 @@ class Catalog:
             "context": 32000, "price_in": 0.0, "price_out": 0.0, "modalities": ["text"],
             "tools": prov != "openrouter", "name": mid,
         }
+        over = (self.cfg.get("model_info") or {}).get(model) or (self.cfg.get("model_info") or {}).get(mid) or {}
+        info.update({k: v for k, v in over.items() if k in ("context", "modalities", "tools", "price_in", "price_out")})
         info["id"], info["provider"], info["known"] = mid, prov, bool(known)
         info["tier"] = self.cfg["tiers"].get(model) or self.cfg["tiers"].get(mid) or self._tier(info, prov)
         return info
