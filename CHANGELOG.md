@@ -1,8 +1,8 @@
 # Changelog
 
-## Não lançado
+## v0.1.1
 
-- Licença MIT adicionada (`LICENSE`).
+- Licença MIT adicionada (`LICENSE`) e declarada no pacote. Nenhuma mudança de código em relação à v0.1.0.
 
 ## v0.1.0 — primeira versão
 
