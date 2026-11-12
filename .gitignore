@@ -1,0 +1,20 @@
+# segredos — nunca versionar
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# dados locais do harness e do benchmark (contêm caminhos da máquina)
+.hangar/
+bench/runs/
+bench/results/
+bench/logs/
+
+# gerado por ferramentas
+graphify-out/

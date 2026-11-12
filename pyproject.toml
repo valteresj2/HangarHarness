@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hangar-harness"
+version = "0.1.0"
+description = "Harness de agentes agnóstico de modelo, econômico em tokens e observável em tempo real"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+keywords = ["agent", "harness", "llm", "mcp", "openrouter"]
+
+[project.urls]
+Repository = "https://github.com/valteresj2/HangarHarness"
+
+[project.scripts]
+hangar = "hangar.cli:main"
+
+[tool.setuptools]
+packages = ["hangar"]
+
+[tool.setuptools.package-data]
+hangar = ["ui.html", "flow.js"]
