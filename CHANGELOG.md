@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0
+
+- **Superfície `.claude/` do projeto**: além de `CLAUDE.md`/`AGENTS.md`/`HANGAR.md` na raiz, o harness agora lê `.claude/CLAUDE.md`,
+  os sub-agentes de `.claude/agents/*.md` (delegados com `task(prompt, agent="nome")`), os comandos de barra de
+  `.claude/commands/**/*.md` (`/nome argumentos`, com `$ARGUMENTS` e `$1`…) e, em projetos confiáveis, os hooks do Claude Code
+  de `.claude/settings.json` (`PreToolUse`, `PostToolUse`, `Stop`; bloqueio por código de saída 2 ou `decision: block`).
+  Um harness escrito para o Claude Code vale também aqui.
+- **Bridge**: `trust_project` (o hospedeiro atesta a pasta), `allowed_tools` (restringe as tools da conversa; `[]` = juiz sem tools),
+  `confine` (as tools de arquivo não saem da pasta de trabalho) e a lista de comandos de barra no evento `ready`.
+
 ## v0.2.0
 
 - **Modo bridge** (`python -m hangar bridge`): o harness como motor de outro programa, por JSON em linhas no stdin/stdout.

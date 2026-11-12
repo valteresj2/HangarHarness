@@ -217,6 +217,27 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(b.until("turn_end")["status"], "success")
         self.assertIn("8080", json.dumps(self.llm.requests[-1]["body"]["messages"]))
 
+    def test_slash_command_expands_and_ready_lists_commands(self):
+        (self.cwd / ".claude" / "commands").mkdir(parents=True)
+        (self.cwd / ".claude" / "commands" / "resumo.md").write_text(
+            "---\ndescription: Resume\n---\nResuma $ARGUMENTS em 3 linhas.", encoding="utf-8")
+        self.llm.script = [{"text": "resumido"}]
+        b = self.start()
+        ready = b.until("ready")
+        self.assertEqual(ready["commands"], [{"name": "resumo", "description": "Resume", "argumentHint": ""}])
+        b.send({"type": "user", "text": "/resumo notas.md"})
+        b.until("turn_end")
+        self.assertIn("command", [e["type"] for e in b.all])
+        self.assertEqual(self.llm.requests[0]["body"]["messages"][1]["content"], "Resuma notas.md em 3 linhas.")
+
+    def test_allowed_tools_makes_a_tool_less_judge(self):
+        self.llm.script = [{"text": "escolho A"}]
+        b = self.start(allowed_tools=[], permission="readonly")
+        self.assertEqual(b.until("ready")["tools"], [])
+        b.send({"type": "user", "text": "escolha"})
+        self.assertEqual(b.until("turn_end")["status"], "success")
+        self.assertNotIn("tools", self.llm.requests[0]["body"])                 # no tool schemas were sent at all
+
     def test_bad_start_is_reported(self):
         b = Bridge(self.home, {"cwd": str(self.cwd)})                            # no model
         self.addCleanup(b.close)
