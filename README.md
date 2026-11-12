@@ -166,3 +166,7 @@ bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas
 tests/   test_core.py · mcp_vault_server.py
 docs/    PESQUISA.md · BENCHMARK.md
 ```
+
+## Licença
+
+[MIT](LICENSE).

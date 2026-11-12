@@ -1,5 +1,9 @@
 # Changelog
 
+## Não lançado
+
+- Licença MIT adicionada (`LICENSE`).
+
 ## v0.1.0 — primeira versão
 
 Harness de agentes em Python puro (só biblioteca padrão), testado em Windows 11 com modelos via OpenRouter.
