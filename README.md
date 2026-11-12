@@ -48,6 +48,28 @@ De qualquer pasta: `python caminho/para/hh.py run "..."`.
 | Provedor fora do ar | `--fallback a,b`: depois das tentativas com backoff, troca para um modelo reserva. |
 | Resultado "pronto" mas errado | Workflow `verify` com `--verifier` mais forte: revisor de contexto limpo roda o código e rejeita; na segunda rejeição o executor é escalado. |
 
+## Estúdio: dashboards, apresentações, imagens e vídeo
+
+O agente produz peças visuais com quatro comandos que ele chama pelo `shell`, guiado por cinco skills embutidas
+(`data-analysis`, `dashboard`, `presentation`, `image-generation`, `motion-video`) carregadas só quando a tarefa pede.
+São comandos, e não tools, de propósito: schema de tool é pago em toda chamada ao modelo; comando só custa quando é usado.
+
+```bash
+python -m hangar studio screenshot pagina.html saida.png --width 1440 --height 900 --full   # captura + erros de console, overflow, texto cortado
+python -m hangar studio video anim.html saida.mp4 --duration 15 --fps 30                    # HTML/three.js -> MP4, quadro a quadro
+python -m hangar studio image "prompt" assets/hero.png --aspect 16:9                        # modelo de imagem via OpenRouter
+python -m hangar studio pptx deck.json deck.pptx                                            # PowerPoint nativo, texto editável
+```
+
+- **Navegador headless sem dependências** (`browser.py`): fala o protocolo DevTools do Chrome/Edge por um cliente WebSocket de ~60 linhas.
+  O agente usa a captura com a tool `perceive` para olhar o que fez e corrigir.
+- **Vídeo determinístico**: a página define `window.hangarFrame(t)` e o renderizador posiciona cada quadro no instante exato (animações CSS
+  são posicionadas sozinhas), captura e envia ao ffmpeg. Não é gravação de tela: máquina lenta não perde quadro.
+- **PPTX sem dependências** (`pptx.py`): escreve o XML do pacote direto; 8 layouts (capa, seção, KPIs, tópicos, imagem, duas colunas, citação,
+  encerramento) com tema configurável. Validado abrindo no PowerPoint real.
+- **Imagem**: padrão `google/gemini-3.1-flash-image` (cerca de US$ 0,07 por imagem); o gasto entra na conta da sessão.
+- Requisitos: Chrome ou Edge para captura/vídeo, ffmpeg para vídeo, chave do OpenRouter para imagem.
+
 ## Regras do projeto: ganchos e plugins
 
 Política do projeto fica em código, não em pedidos ao modelo. Em `hangar.toml`:
@@ -161,8 +183,9 @@ api_key_env = "MEU_GATEWAY_KEY"
 hangar/  agent.py (loop) · graph.py (workflows) · tools.py · toolcall.py (reparo/protocolo textual) · context.py (economia)
          llm.py · models.py (catálogo/tiers) · media.py (multimodal) · mcp.py · skills.py · machine.py · session.py · events.py
          hooks.py (regras e plugins no loop) · lessons.py (lições entre sessões)
+         studio.py + browser.py + pptx.py (peças visuais) · skills/ (5 skills embutidas)
          server.py + ui.html + flow.js (dashboard e grafo ao vivo) · cli.py
-bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas complexas) · run_bench.py (Hangar × modelos, e Claude Code)
+bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas complexas) · tasks_studio.py (análise de dados com 6 entregáveis) · run_bench.py (Hangar × modelos, e Claude Code)
 tests/   test_core.py · mcp_vault_server.py
 docs/    PESQUISA.md · BENCHMARK.md
 ```

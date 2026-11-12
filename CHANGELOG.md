@@ -1,5 +1,13 @@
 # Changelog
 
+## Não lançado
+
+- **Estúdio** (`python -m hangar studio`): `screenshot`/`check` (navegador headless via DevTools, sem dependências), `video` (HTML/three.js para MP4
+  quadro a quadro), `image` (modelos de imagem do OpenRouter) e `pptx` (PowerPoint nativo com texto editável).
+- Cinco skills embutidas: `data-analysis`, `dashboard`, `presentation`, `image-generation`, `motion-video`.
+- Gasto de comandos do estúdio (imagens) contabilizado na sessão.
+- Tarefa de benchmark `studio`: análise de dados com dashboard, deck HTML, PPTX, imagem e vídeo.
+
 ## v0.1.1
 
 - Licença MIT adicionada (`LICENSE`) e declarada no pacote. Nenhuma mudança de código em relação à v0.1.0.

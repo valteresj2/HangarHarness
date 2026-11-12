@@ -9,11 +9,14 @@ from pathlib import Path
 from .config import HOME
 
 
+BUILTIN = Path(__file__).resolve().parent / "skills"       # shipped with the harness; a project skill of the same name wins
+
+
 def discover(cwd: Path, extra_dirs: list | None = None) -> dict[str, dict]:
     """Project skills + ~/.hangar/skills. Other global folders (e.g. ~/.claude/skills) are opt-in via
     `skills_dirs`: every listed skill costs prompt tokens and distracts weak models."""
     roots = [cwd / ".hangar" / "skills", cwd / ".claude" / "skills", cwd / ".agents" / "skills", HOME / "skills",
-             *[Path(str(d)).expanduser() for d in extra_dirs or []]]
+             *[Path(str(d)).expanduser() for d in extra_dirs or []], BUILTIN]
     found: dict[str, dict] = {}
     for root in roots:
         if not root.is_dir():

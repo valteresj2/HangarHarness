@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import media, skills as skills_mod
+from .config import PKG_ROOT
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".hangar", "dist", "build", ".mypy_cache", ".next", "target"}
 DANGEROUS = [re.compile(p, re.I) for p in (
@@ -253,7 +254,10 @@ def t_shell(ctx: Ctx, a: dict) -> str:
         if not s.approve(f"Run {'RISKY ' if risky else ''}command?\n{cmd}"):
             raise ToolError("command not approved" + (" (matched a destructive-command rule; needs explicit user approval)." if risky else "."))
     timeout = min(600, max(1, int(a.get("timeout") or s.cfg["shell_timeout"])))
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "PAGER": "cat", "GIT_PAGER": "cat", "CI": "1"}
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1", "PAGER": "cat", "GIT_PAGER": "cat", "CI": "1",
+           # `python -m hangar studio ...` must work from any working directory, and report its spend to this session
+           "PYTHONPATH": os.pathsep.join(x for x in (str(PKG_ROOT), os.environ.get("PYTHONPATH", "")) if x),
+           "HANGAR_SESSION_DIR": str(s.dir)}
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     if a.get("background"):                              # servers, watchers, long builds: do not block the loop
         s.bg_n += 1

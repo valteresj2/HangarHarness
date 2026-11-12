@@ -199,3 +199,36 @@ A primeira coluna é o achado útil: a regra falhou porque o agente pôs opçõe
 As tarefas não são idênticas (a segunda é menor), então a queda de custo não é toda da lição; o que o teste mostra é que a tentativa falha com `make` desapareceu.
 No roteiro dos ganchos a biblioteca não gravou nada na versão final — o único atrito era uma regra do projeto, que por projeto não vira lição.
 
+---
+
+# Parte 4 — Análise de dados com peças visuais (tarefa `studio`)
+
+Uma base de vendas com 4.290 linhas (duplicatas e cancelamentos a tratar) e seis entregáveis: `analysis.json`, `dashboard.html`, `deck.html`,
+`deck.pptx`, `assets/hero.png` (imagem gerada) e `video.mp4` (motion graphics com three.js, 12-20 s, 1080p).
+
+O verificador confere: cada número do `analysis.json` contra uma implementação de referência; dashboard e deck carregados num navegador real
+(sem erros de console, com gráficos, sem overflow horizontal); PPTX como pacote válido com slides, texto e imagens; imagem com dimensões mínimas;
+vídeo com duração, resolução e quadros realmente diferentes. **Design não é verificável por script**: avaliei olhando as capturas e os slides
+exportados pelo PowerPoint.
+
+| Modelo | Verificações | Custo | Tempo | Chamadas LLM |
+|---|---|---|---|---|
+| `claude-sonnet-5.5` | todas ✅ | US$ 0,76 (0,69 modelo + 0,07 imagem) | 466s | 51 |
+| `claude-haiku-5.5` | todas ✅ | US$ 0,15 (0,08 modelo + 0,07 imagem) | 560s | 73 |
+
+Uma execução por modelo. As peças geradas não são versionadas (vídeos e imagens grandes); rode `python bench/run_bench.py --models <modelo> --tasks studio` para reproduzir.
+
+Avaliação visual (minha, subjetiva):
+- **Dashboards**: os dois de nível profissional — títulos que são conclusões, KPIs, barras ordenadas com rótulo direto, insights com números. O Haiku
+  acrescentou por conta própria um gráfico de cancelamento por canal e hachurou o mês parcial.
+- **Apresentações**: identidade consistente entre HTML e PPTX; o PowerPoint abre os dois arquivos sem pedir reparo. No deck HTML do Sonnet alguns
+  gráficos ficaram pequenos, com área vazia ao lado.
+- **Vídeos**: é a peça mais fraca. O do Sonnet tem barras 3D e câmera em movimento, mas com texto invadindo as barras numa cena; o do Haiku tem
+  cenas com muito espaço vazio. Em ambos os contadores são longos demais (um quadro pausado mostra número errado).
+
+O que os resultados mudaram no harness:
+- Gerador de PPTX: valor dos KPIs com tamanho único por linha, cartões sem espaço morto quando não há variação, gráficos encaixados sem "moldura dentro de moldura".
+- Skills: gráfico ocupa pelo menos 70% do slide; no vídeo, zona reservada para texto, cena preenchida e contadores curtos que param no valor final.
+
+Não reexecutei os modelos depois dessas mudanças nas skills, então o efeito delas sobre os vídeos ainda não foi medido.
+

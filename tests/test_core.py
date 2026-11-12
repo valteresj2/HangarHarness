@@ -281,6 +281,84 @@ class LessonTests(unittest.TestCase):
         self.assertEqual(self.lessons.reflect(off, {"status": "done", "final": "ok"}), [])
 
 
+PNG_1x1 = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+           b"\x00\x00\x00\rIDATx\x9cc\xf8\xcf\xc0\xf0\x1f\x00\x05\x00\x01\xff\x89\x99=\x1d\x00\x00\x00\x00IEND\xaeB`\x82")
+
+
+class StudioTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="hangar_s_")).resolve()
+
+    def test_pptx_package_is_well_formed(self):
+        import zipfile
+        from xml.dom import minidom
+        from hangar import pptx
+        (self.tmp / "pic.png").write_bytes(PNG_1x1)
+        self.assertEqual(pptx.image_size(self.tmp / "pic.png"), (1, 1))
+        spec = {"title": "Teste & <cia>", "slides": [
+            {"layout": "title", "title": "Título com acento & símbolo <ok>", "subtitle": "sub", "image": "pic.png"},
+            {"layout": "kpis", "title": "KPIs", "kpis": [{"label": "A", "value": "1", "delta": "-2%"}, {"label": "B", "value": "2", "delta": "+3%"}], "takeaway": "t"},
+            {"layout": "bullets", "title": "B", "bullets": ["um", "dois"], "image": "pic.png"},
+            {"layout": "image", "title": "I", "image": "pic.png", "caption": "c"},
+            {"layout": "two_col", "title": "T", "left": {"heading": "L", "bullets": ["a"]}, "right": {"heading": "R", "bullets": ["b"]}},
+            {"layout": "section", "title": "S"}, {"layout": "quote", "text": "q", "by": "x"}, {"layout": "closing", "title": "fim"}]}
+        r = pptx.build(spec, self.tmp / "d.pptx", base=self.tmp)
+        self.assertEqual((r["slides"], r["images"]), (8, 1))                     # the same picture is stored once
+        with zipfile.ZipFile(self.tmp / "d.pptx") as z:
+            names = z.namelist()
+            self.assertEqual(names[0], "[Content_Types].xml")
+            self.assertIsNone(z.testzip())
+            for n in names:
+                if n.endswith((".xml", ".rels")):
+                    minidom.parseString(z.read(n))                                # every part parses (escaping is right)
+            self.assertIn("Título com acento &amp; símbolo &lt;ok&gt;", z.read("ppt/slides/slide1.xml").decode("utf-8"))
+            self.assertEqual(len([n for n in names if n.startswith("ppt/slides/slide")]), 8)
+        with self.assertRaises(FileNotFoundError):
+            pptx.build({"slides": [{"layout": "image", "image": "nao_existe.png"}]}, self.tmp / "x.pptx", base=self.tmp)
+        with self.assertRaises(ValueError):
+            pptx.build({"slides": []}, self.tmp / "x.pptx", base=self.tmp)
+
+    def test_builtin_skills_ship_with_the_harness(self):
+        from hangar import skills
+        found = skills.discover(self.tmp)
+        for name in ("data-analysis", "dashboard", "presentation", "image-generation", "motion-video"):
+            self.assertIn(name, found)
+            self.assertTrue(found[name]["description"])
+        (self.tmp / ".hangar" / "skills" / "dashboard").mkdir(parents=True)
+        (self.tmp / ".hangar" / "skills" / "dashboard" / "SKILL.md").write_text("---\nname: dashboard\ndescription: do projeto\n---\nx", encoding="utf-8")
+        self.assertEqual(skills.discover(self.tmp)["dashboard"]["description"], "do projeto")      # a project skill overrides the built-in
+
+    def test_studio_spend_is_added_to_the_session_bill(self):
+        s = make_session(self.tmp)
+        (s.dir / "studio_usage.jsonl").write_text(json.dumps({"kind": "image", "model": "img/model", "cost": 0.07}) + "\n", encoding="utf-8")
+        summary = s.finish("done")
+        self.assertAlmostEqual(summary["cost"], 0.07)
+        self.assertEqual(summary["by_model"]["img/model"]["calls"], 1)
+
+    def test_shell_can_reach_the_studio_commands_from_any_folder(self):
+        s = make_session(self.tmp)
+        out = T.builtin()["shell"].fn(T.Ctx(s, FakeAgent()), {"command": "python -m hangar studio --help"})
+        s.bus.close()
+        self.assertIn("screenshot", out)
+        self.assertIn("[exit 0]", out)
+
+    def test_browser_screenshot_and_frame_accurate_seek(self):
+        from hangar import browser
+        if not browser.find_browser():
+            self.skipTest("no Chrome/Edge on this machine")
+        page = self.tmp / "a.html"
+        page.write_text("<html><body style='margin:0'><div id='b' style='height:40px;background:#f00;animation:g 4s linear forwards'></div>"
+                        "<style>@keyframes g{from{width:0}to{width:400px}}</style>"
+                        "<script>window.hangarFrame = t => { document.title = 't=' + t; }; console.error('boom');</script></body></html>", encoding="utf-8")
+        with browser.Browser(800, 400) as b:
+            b.goto(str(page))
+            b.eval(browser.SEEK % 2.0)
+            self.assertEqual(b.eval("document.title"), "t=2")
+            self.assertAlmostEqual(b.eval("document.getElementById('b').getBoundingClientRect().width"), 200, delta=2)   # CSS animation seeked to 50%
+            self.assertEqual(b.screenshot()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertTrue(any("boom" in e for e in b.errors))                  # console errors are reported back to the agent
+
+
 class MCPTests(unittest.TestCase):
     def test_stdio_roundtrip(self):
         tmp = Path(tempfile.mkdtemp(prefix="hangar_mcp_"))

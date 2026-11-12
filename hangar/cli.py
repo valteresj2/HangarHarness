@@ -246,6 +246,10 @@ def main(argv: list[str] | None = None) -> int:
             pass
     if os.name == "nt":
         os.system("")          # enable ANSI colours in the Windows console
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "studio":                    # production commands (screenshot, video, image, pptx)
+        from . import studio
+        return studio.main(args[1:])
     ap = argparse.ArgumentParser(prog="hangar", description="Hangar Harness — model-agnostic, token-frugal agent harness")
     ap.add_argument("--version", action="version", version=__version__)
     sub = ap.add_subparsers(dest="cmd", required=True)

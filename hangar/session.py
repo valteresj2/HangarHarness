@@ -215,7 +215,21 @@ class Session:
         ans = self.ask(what, ["yes", "no"], kind="approval")
         return bool(ans) and ans.strip().lower() in ("y", "yes", "s", "sim", "ok", "approve", "allow")
 
+    def _external_usage(self) -> None:
+        """Money spent by `hangar studio` commands the agent ran (image generation) belongs in this session's bill."""
+        try:
+            rows = [json.loads(l) for l in (self.dir / "studio_usage.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+        except (OSError, ValueError):
+            return
+        for r in rows:
+            self.totals["cost"] += float(r.get("cost") or 0)
+            m = self.by_model.setdefault(r.get("model", "studio"), {"cost": 0.0, "prompt": 0, "completion": 0, "cached": 0, "calls": 0})
+            m["cost"] += float(r.get("cost") or 0)
+            m["calls"] += 1
+        (self.dir / "studio_usage.jsonl").rename(self.dir / "studio_usage.counted.jsonl")
+
     def finish(self, status: str, final: str = "") -> dict:
+        self._external_usage()
         self.meta.update(status=status, ended=time.time(), final=final[:4000])
         summary = {"session": self.id, "status": status, "model": self.model, "workflow": self.workflow,
                    "duration_s": round(time.time() - self.started, 1), "files": sorted(self.files),
