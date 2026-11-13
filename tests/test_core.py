@@ -70,6 +70,23 @@ class ToolTests(unittest.TestCase):
     def tearDown(self):
         self.s.bus.close()
 
+    def test_a_failed_look_around_does_not_undo_a_passing_check(self):
+        for cmd, probe in (("git status --short", True), ("git rev-parse --show-toplevel", True), ("pwd; ls -la; git diff --stat -- a.py", True),
+                           ("cat a.py | head -3", True), ("git -C . log --oneline", True), ("python -m unittest -q", False),
+                           ("git commit -m x", False), ("ls && pytest", False), ("echo x > a.py", False), ("", False)):
+            self.assertEqual(T.is_probe(cmd), probe, cmd)
+        sh = self.b["shell"].fn
+        sh(self.ctx, {"command": "python -c \"print('testes ok')\""})
+        self.assertEqual(self.s.last_exit, 0)
+        self.assertIn("exit 128", sh(self.ctx, {"command": "git rev-parse --show-toplevel"}))     # not a repository
+        self.assertEqual(self.s.last_exit, 0)                                               # the passing check still stands
+        self.b["write"].fn(self.ctx, {"path": "a.py", "content": "x = 1\n"})
+        sh(self.ctx, {"command": "git rev-parse --show-toplevel"})
+        self.assertNotEqual(self.s.last_exit, 0)                                            # an edit since the check: nothing is verified now
+        sh(self.ctx, {"command": "python -c \"print('ok')\""})
+        sh(self.ctx, {"command": "python -c \"import sys; sys.exit(3)\""})
+        self.assertEqual(self.s.last_exit, 3)                                               # a real command that fails still counts
+
     def test_write_read_edit(self):
         self.b["write"].fn(self.ctx, {"path": "a.py", "content": "def f():\n    return 1\n"})
         self.assertIn("1\tdef f():", self.b["read"].fn(self.ctx, {"path": "a.py"}))

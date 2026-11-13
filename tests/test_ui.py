@@ -271,7 +271,11 @@ class WorkflowTests(UiBase):
         team = {m["role"]: m["model"] for m in next(e for e in evs if e["type"] == "team")["team"]}     # no model was sent: the run is on "auto"
         self.assertEqual({m for r, m in team.items() if r != "perception"}, {"fake/model"})
         self.assertEqual(self.c.json("/api/team?cwd=" + urllib.request.quote(str(cwd)))[1]["team"][0], {
-            "role": "worker", "model": "fake/model", "why": "faz a tarefa: o mais barato que resolveu todas as tarefas dos nossos benchmarks"})
+            "role": "worker", "model": "fake/model", "evidence": "",                   # a private provider: nothing was benchmarked
+            "why": "faz a tarefa: o mais barato que resolveu todas as tarefas do dia a dia, de mídia e difíceis"})
+        end = next(e for e in evs if e["type"] == "session_end")
+        self.assertEqual({r["role"] for r in end["by_role"]}, {"worker", "verifier"})          # the bill says who spent it
+        self.assertEqual(sum(r["calls"] for r in end["by_role"]), end["llm_calls"])
         self.assertEqual([(e["node"], e["visit"]) for e in evs if e["type"] == "node_start"], [("work", 1), ("review", 1), ("work", 2), ("review", 2)])
         self.assertEqual((cwd / "soma.py").read_text(encoding="utf-8").splitlines()[1].strip(), "return a + b")
         self.assertIn("soma subtrai", json.dumps(self.llm.requests[-2]["body"]["messages"]))      # the reviewer's feedback reached the worker
@@ -494,6 +498,8 @@ class PageTests(UiBase):
         self.assertEqual((cwd / "ola.txt").read_text(), "ola")
         self.assertIn("ACCEPTANCE", self.text("[data-testid=chat]"))                    # the planner's plan is shown
         self.assertIn("executor model · planejador model · revisor model", self.text("[data-testid=team-line]"))
+        bill = self.text("[data-testid=role-costs]")                                    # who spent what, at the end of the run
+        self.assertTrue(all(w in bill for w in ("executor", "planejador", "revisor")), bill)
         # the graph opened by itself, with one lane per stage
         self.wait("document.querySelectorAll('#flowhost .fnode.k-head').length === 3", what="three lanes")
         heads = b.eval("[...document.querySelectorAll('#flowhost .fnode.k-head .t1')].map(t => t.textContent)")

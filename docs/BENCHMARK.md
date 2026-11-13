@@ -48,6 +48,24 @@ Custo por tarefa:
 | openai/gpt-6-luna [verify] | bugfix | ✅ | $0.0015 | 24.1s |
 | openai/gpt-6-luna [verify] | feature | ✅ | $0.0043 | 43.7s |
 
+## Equipe automática (13/11/2026)
+
+`-m auto`: executor `gpt-6-luna`, planejador e revisor `claude-haiku-5.5`, percepção `muse-ember` — a equipe gerada por
+`bench/roster.py` a partir dos resultados deste benchmark.
+
+| Configuração | Tarefa | Ok | Custo | Tempo | Quem gastou |
+|---|---|---|---|---|---|
+| auto [pev] | bugfix | ✅ ✅ ✅ | $0.0024–0.0030 | 24–29s | executor ~40% · planejador ~30% · revisor ~27% |
+| auto [pev] | feature | ✅ | $0.0033 | 23.3s | revisor $0.0011 · executor $0.0011 · planejador $0.0010 |
+| auto | image | ✅ | $0.0005 | 7.1s | executor |
+| auto | audio | ✅ | $0.0016 | 16.5s | percepção $0.0013 · executor $0.0004 |
+| auto | video | ✅ | $0.0015 | 14.3s | percepção $0.0011 · executor $0.0003 |
+| auto | bugfix | ✅ | $0.0008 | 14.8s | executor |
+| auto | ask | ✅ | $0.0004 | 7.1s | executor |
+
+O `pev` com a equipe automática custou cerca de um décimo do `pev` com Sonnet planejando (US$ 0,026–0,060 na tabela
+anterior), com o mesmo resultado nessas duas tarefas. Uma execução por linha, salvo o `bugfix` em `pev` (três).
+
 ## Leituras
 
 1. **Seis modelos fizeram 7/7**, do Sonnet 5.5 ao GPT-6 Luna; o de 1.7B (`lfm-3-1.7b`) fez 6/7 nesta rodada e 7/7 nas duas anteriores (o erro foi trocar dois dígitos ao copiar a transcrição).

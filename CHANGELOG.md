@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.5.0
+
+- **Equipe de modelos gerada do benchmark**: `python bench/roster.py` lê `bench/results/*.json` e grava `hangar/roster.json`,
+  que o roteador usa no lugar da lista escrita à mão. Um modelo só entra num papel se resolveu todas as execuções das
+  tarefas que o papel exige (mínimo de duas por tarefa); a ordem é o custo por tarefa resolvida. `~/.hangar/roster.json`
+  substitui a lista que vem no pacote.
+- **A equipe mudou com os números**: profundo, planejador e reforço passam de `gpt-6.1-terra`/`claude-sonnet-5.5` para
+  `claude-haiku-5.5` — nos nossos resultados ele resolveu a tarefa mais difícil em todas as execuções por menos da metade
+  do custo do Terra e um oitavo do Sonnet.
+- **Conta por papel**: toda execução diz quanto cada papel gastou (executor, sub-agentes leve e profundo, planejador,
+  revisor, reforço, auxiliar, percepção, estúdio) — no CLI, no `summary.json`/`meta.json` (`by_role`), no `turn_end` do
+  bridge e no app web (linha abaixo da resposta e coluna de gasto no botão "Modelos", com a evidência de cada escolha).
+- **Reforço indevido corrigido**: depois de os testes passarem, um comando só de consulta que falhava (`git status` numa
+  pasta sem git, por exemplo) fazia o harness concluir que o trabalho não estava verificado e chamar o modelo de reforço.
+  Agora uma consulta que falha não desfaz uma verificação que passou, desde que nada tenha sido editado depois. Em três
+  execuções reais de `pev` na tarefa `bugfix`, o custo caiu de US$ 0,0053 para US$ 0,0024–0,0030.
+- **Validado com modelos reais** (equipe automática): `pev` em `bugfix` e `feature`; imagem, áudio e vídeo pelo CLI e
+  pelo app web (anexo enviado por upload); a conta por papel bate com o total em todas as execuções.
+
 ## v0.4.2
 
 - **Grafo ao vivo com o mouse**: arraste para mover a tela, roda do mouse para dar zoom no ponto do cursor, duplo clique no

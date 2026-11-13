@@ -76,6 +76,7 @@ class Session:
         self.totals = {"cost": 0.0, "prompt": 0, "completion": 0, "cached": 0, "cache_write": 0, "reasoning": 0,
                        "llm_calls": 0, "tool_calls": 0, "tool_errors": 0, "questions": 0}
         self.by_model: dict[str, dict] = {}
+        self.by_role: dict[str, dict] = {}         # who spent what: worker, light, deep, sub, planner, verifier, escalation, helper, perception, studio
         self.bg: dict[str, dict] = {}
         self.bg_n = 0
         self.notes: list[str] = []
@@ -95,6 +96,7 @@ class Session:
                 if k in self.totals:
                     self.totals[k] = v
             self.by_model = old.get("by_model") or {}
+            self.by_role = old.get("by_role") or {}
             self.meta["task"] = old.get("task") or self.meta["task"]
             self.meta["resumed"] = int(old.get("resumed") or 0) + 1
         except (OSError, ValueError):
@@ -148,11 +150,21 @@ class Session:
 
     # ------------------------------------------------------------- bookkeeping
     def _save_meta(self) -> None:
-        (self.dir / "meta.json").write_text(json.dumps({**self.meta, "totals": self.totals, "by_model": self.by_model},
+        (self.dir / "meta.json").write_text(json.dumps({**self.meta, "totals": self.totals, "by_model": self.by_model, "by_role": self.by_role},
                                                        ensure_ascii=False), encoding="utf-8")
 
-    def add_usage(self, reply, model: str, agent: str) -> None:
+    def _role_usage(self, role: str, model: str, u: dict) -> None:
+        r = self.by_role.setdefault(role, {"cost": 0.0, "prompt": 0, "completion": 0, "cached": 0, "calls": 0, "models": []})
+        for k in ("cost", "prompt", "completion", "cached"):
+            r[k] += u.get(k, 0)
+        r["calls"] += 1
+        if model not in r["models"]:
+            r["models"].append(model)
+
+    def add_usage(self, reply, model: str, agent: str, role: str = "") -> None:
         u = reply.usage
+        role = role or {"compactor": "helper", "reflector": "helper", "perception": "perception"}.get(agent, "worker")
+        self._role_usage(role, model, u)
         for k in ("cost", "prompt", "completion", "cached", "cache_write", "reasoning"):
             self.totals[k] += u.get(k, 0)
         self.totals["llm_calls"] += 1
@@ -160,7 +172,7 @@ class Session:
         for k in ("cost", "prompt", "completion", "cached"):
             m[k] += u.get(k, 0)
         m["calls"] += 1
-        self.bus.emit("llm_end", model=model, agent=agent, ms=reply.ms, finish=reply.finish, usage=u,
+        self.bus.emit("llm_end", model=model, agent=agent, role=role, ms=reply.ms, finish=reply.finish, usage=u,
                       totals={**self.totals, "cost": round(self.totals["cost"], 6)})
         self._save_meta()
 
@@ -264,7 +276,19 @@ class Session:
             m = self.by_model.setdefault(r.get("model", "studio"), {"cost": 0.0, "prompt": 0, "completion": 0, "cached": 0, "calls": 0})
             m["cost"] += float(r.get("cost") or 0)
             m["calls"] += 1
+            self._role_usage("studio", r.get("model", "studio"), {"cost": float(r.get("cost") or 0)})
         (self.dir / "studio_usage.jsonl").rename(self.dir / "studio_usage.counted.jsonl")
+
+    def roles(self, since: dict | None = None) -> list[dict]:
+        """Spend by role, most expensive first; with `since` (an earlier copy of by_role) only what was spent after it."""
+        out = []
+        for role, r in self.by_role.items():
+            b = (since or {}).get(role) or {}
+            calls = r["calls"] - b.get("calls", 0)
+            if calls <= 0:
+                continue
+            out.append({"role": role, "models": list(r["models"]), "calls": calls, **{k: (round(r[k] - b.get(k, 0), 6) if k == "cost" else r[k] - b.get(k, 0)) for k in ("cost", "prompt", "completion", "cached")}})
+        return sorted(out, key=lambda x: -x["cost"])
 
     def finish(self, status: str, final: str = "") -> dict:
         self._external_usage()
@@ -272,7 +296,7 @@ class Session:
         summary = {"session": self.id, "status": status, "model": self.model, "workflow": self.workflow,
                    "duration_s": round(time.time() - self.started, 1), "files": sorted(self.files),
                    **{k: (round(v, 6) if isinstance(v, float) else v) for k, v in self.totals.items()},
-                   "by_model": self.by_model, "final": final, "log": str(self.dir / "events.jsonl")}
+                   "by_model": self.by_model, "by_role": self.roles(), "final": final, "log": str(self.dir / "events.jsonl")}
         self.bus.emit("session_end", **{k: v for k, v in summary.items() if k != "final"})
         self._save_meta()
         (self.dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")

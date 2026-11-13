@@ -163,7 +163,8 @@ class Live:
                 s = store.sessions.get(self.sid) or {}
                 status = ev.get("status")
                 store.patch(self.sid, status="error" if status in ("error", "incomplete") else "idle" if not self.busy else "working",
-                            cost=ev.get("session_cost", s.get("cost", 0)), contextTokens=ev.get("context_tokens"),
+                            cost=ev.get("session_cost", s.get("cost", 0)), byRole=ev.get("session_by_role") or s.get("byRole"),
+                            contextTokens=ev.get("context_tokens"),
                             contextWindow=ev.get("context_window"), unread=self.app.active != self.sid)
             store.append(self.sid, ev)
         code = self.proc.wait()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hangar-harness"
-version = "0.4.2"
+version = "0.5.0"
 description = "Harness de agentes agnóstico de modelo, econômico em tokens e observável em tempo real"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,4 +23,4 @@ hangar = "hangar.cli:main"
 packages = ["hangar"]
 
 [tool.setuptools.package-data]
-hangar = ["ui.html", "ui.css", "ui.js", "flow.js", "skills/*/SKILL.md"]
+hangar = ["ui.html", "ui.css", "ui.js", "flow.js", "roster.json", "skills/*/SKILL.md"]

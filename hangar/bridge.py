@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     qlock = threading.Lock()
 
     def turn(msg: dict) -> None:
-        t0, before = time.time(), dict(s.totals)
+        t0, before, roles_before = time.time(), dict(s.totals), {k: dict(v) for k, v in s.by_role.items()}
         s.abort.clear()
         s.incomplete = ""
         if turn_budget:
@@ -183,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:                           # a crash in one turn must not kill the conversation
             status, error = "error", f"{type(e).__name__}: {e}"
         delta = {k: s.totals[k] - before.get(k, 0) for k in ("cost", "prompt", "completion", "cached", "cache_write")}
+        delta["by_role"], delta["session_by_role"] = s.roles(roles_before), s.roles()
         try:
             agent.save()
             s._save_meta()

@@ -207,6 +207,27 @@ def t_grep(ctx: Ctx, a: dict) -> str:
 
 
 # ----------------------------------------------------------------------- shell
+_PROBES = {"ls", "dir", "pwd", "cd", "cat", "head", "tail", "type", "which", "where", "echo", "find", "grep", "rg", "wc", "stat", "tree", "file"}
+_GIT_PROBES = {"status", "diff", "log", "show", "rev-parse", "branch", "ls-files", "remote", "describe", "blame"}
+
+
+def is_probe(cmd: str) -> bool:
+    """True when every part of the command only looks at things (ls, cat, git status...). A probe that fails says
+    nothing about the work: `git status` outside a repository must not undo a test run that passed."""
+    parts = [p.strip() for p in re.split(r"&&|\|\||[;|\n]", cmd) if p.strip()]
+    for part in parts:
+        words = part.split()
+        head = words[0].lower().removesuffix(".exe")
+        if head == "git":
+            rest = [w for i, w in enumerate(words[1:], 1) if words[i - 1] not in ("-C", "-c")]      # `git -C dir log`
+            sub = next((w for w in rest if not w.startswith("-")), "")
+            if sub not in _GIT_PROBES:
+                return False
+        elif head not in _PROBES or ">" in part:
+            return False
+    return bool(parts)
+
+
 def kill_tree(p: subprocess.Popen) -> None:
     try:
         if os.name == "nt":
@@ -285,7 +306,8 @@ def t_shell(ctx: Ctx, a: dict) -> str:
     try:
         raw, _ = p.communicate(timeout=timeout)
         tail = f"[exit {p.returncode}]" if not s.abort.is_set() else "[interrupted by the user]"
-        s.last_exit = p.returncode
+        if not (p.returncode != 0 and s.last_exit == 0 and not s.edits_since_run and is_probe(cmd)):
+            s.last_exit = p.returncode                   # a failed look-around after a passing check leaves the check standing
     except subprocess.TimeoutExpired:
         s.last_exit = -1
         kill_tree(p)
@@ -401,6 +423,7 @@ def t_task(ctx: Ctx, a: dict) -> str:
     name = f"sub{s.sub_count}"
     s.bus.emit("subagent", agent=name, model=model, level=level if s.team else "standard", by=ctx.agent.name)
     sub = Agent(s, model=model, role="sub", toolset="all", name=name, max_steps=20, extra_system=extra)
+    sub.level = level if s.team and level in ("light", "deep") else ""
     out = sub.run(a["prompt"] + "\n\nReturn a concise report (under 400 words) with exact paths/values the caller needs.")
     return out[:8000]
 

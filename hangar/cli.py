@@ -54,6 +54,9 @@ def _printer(quiet: bool):
         elif t == "session_end":
             print(f"{C['dim']}— {rec['status']} · {rec['duration_s']}s · {rec['llm_calls']} llm calls · {rec['tool_calls']} tool calls · "
                   f"{rec['prompt']} in ({rec['cached']} cached) / {rec['completion']} out · ${rec['cost']:.5f}{C['off']}", file=out)
+            for r in rec.get("by_role") or []:           # who spent it
+                print(f"{C['dim']}    {r['role']:11s} ${r['cost']:.5f} · {r['calls']} call{'s' if r['calls'] != 1 else ''} · "
+                      f"{', '.join(m.split('/')[-1] for m in r['models'])}{C['off']}", file=out)
     return p
 
 

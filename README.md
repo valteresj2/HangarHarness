@@ -74,19 +74,32 @@ python -m hangar studio pptx deck.json deck.pptx                                
 
 Com `model = "auto"` (o padrão do app web; no CLI, `hangar run -m auto "…"`) o harness monta a equipe sozinho:
 
-| Papel | Modelo padrão | Por quê |
-|---|---|---|
-| executor | `openai/gpt-6-luna` | o mais barato que resolveu todas as tarefas dos nossos benchmarks |
-| sub-agente leve (`level: light`) | `openai/gpt-6-luna` | busca, leitura e resumo |
-| sub-agente profundo (`level: deep`) | `openai/gpt-6.1-terra` | raciocínio difícil, desenho, depuração |
-| planejador (`pev`) | `openai/gpt-6.1-terra` | o plano orienta todo o resto |
-| revisor (`verify`, `pev`) | `anthropic/claude-haiku-5.5` | de outro fornecedor que o executor: não divide os mesmos pontos cegos |
-| reforço | `anthropic/claude-sonnet-5.5` | assume a conversa só quando o executor trava |
-| auxiliar | `openai/gpt-6-luna` | resumo de contexto e lições |
-| percepção | `meta/muse-ember` | imagem, áudio e vídeo |
+| Papel | Modelo | Por quê | Evidência |
+|---|---|---|---|
+| executor | `openai/gpt-6-luna` | o mais barato que resolveu todas as tarefas do dia a dia, de mídia e difíceis | 50/50 execuções · US$ 0.0015 por tarefa resolvida |
+| sub-agente leve (`level: light`) | `openai/gpt-6-luna` | busca, leitura e resumo | 22/22 execuções · US$ 0.0009 por tarefa resolvida |
+| sub-agente profundo (`level: deep`) | `anthropic/claude-haiku-5.5` | o mais barato que resolveu a tarefa mais difícil | 31/31 execuções · US$ 0.0234 na tarefa mais difícil |
+| planejador (`pev`) | `anthropic/claude-haiku-5.5` | o plano orienta todo o resto | 31/31 execuções · US$ 0.0234 na tarefa mais difícil |
+| revisor (`verify`, `pev`) | `anthropic/claude-haiku-5.5` | de outro fornecedor que o executor: não divide os mesmos pontos cegos | 28/28 execuções · US$ 0.0028 por tarefa resolvida |
+| reforço | `anthropic/claude-haiku-5.5` | assume a conversa só quando o executor trava | 31/31 execuções · US$ 0.0234 na tarefa mais difícil |
+| auxiliar | `openai/gpt-6-luna` | resumo de contexto e lições | 22/22 execuções · US$ 0.0009 por tarefa resolvida |
+| percepção | `meta/muse-ember` | imagem, áudio e vídeo | 9/9 execuções · US$ 0.0016 por tarefa resolvida |
 
-A lista vem dos resultados em [docs/BENCHMARK.md](docs/BENCHMARK.md); se um modelo sair do catálogo, o próximo da fila
-assume. Para trocar um papel:
+A equipe não é escrita à mão: `python bench/roster.py` lê os resultados do benchmark e grava `hangar/roster.json`, que o
+roteador usa. Um modelo só entra num papel se resolveu **todas** as execuções das tarefas que o papel exige, com pelo
+menos duas execuções por tarefa; dentro do papel, a ordem é o custo por tarefa resolvida.
+
+| Papel | Precisa ter resolvido | Ordenado pelo custo em |
+|---|---|---|
+| executor | dia a dia + mídia + difíceis | as mesmas |
+| leve, auxiliar | dia a dia | dia a dia |
+| revisor | dia a dia + difíceis | as mesmas |
+| profundo, planejador, reforço | dia a dia + difíceis + a mais difícil (`tinylang`) | a mais difícil |
+| percepção | mídia, e aceitar imagem, áudio e vídeo | mídia |
+
+Rodou o benchmark de novo (`python bench/run_bench.py …`)? Rode `python bench/roster.py` e a equipe acompanha os números.
+Para usar uma lista só sua, grave em `~/.hangar/roster.json` (`--out`). Se um modelo sair do catálogo, o próximo da fila
+assume. Para trocar um papel na mão:
 
 ```toml
 [team]
@@ -95,6 +108,21 @@ deep = ["openai/gpt-6.1-terra", "anthropic/claude-sonnet-5.5"]
 ```
 
 Com um modelo fixo (`-m openai/gpt-6-luna`) nada é roteado: é a sua escolha para tudo.
+
+### Quem gastou o quê
+
+Toda execução termina com a conta por papel — no CLI, no `summary.json` (`by_role`) e no app web (linha abaixo da
+resposta e coluna de gasto no botão "Modelos"):
+
+```text
+— done · 41.2s · 9 llm calls · 11 tool calls · 30120 in (18044 cached) / 2210 out · $0.00412
+    worker      $0.00231 · 5 calls · gpt-6-luna
+    verifier    $0.00102 · 2 calls · claude-haiku-5.5
+    deep        $0.00079 · 2 calls · claude-haiku-5.5
+```
+
+Os papéis são `worker`, `light`, `deep`, `sub` (sub-agente sem nível), `planner`, `verifier`, `escalation`, `helper`,
+`perception` e `studio` (geração de imagem). A soma dos papéis é o custo total da sessão.
 
 ## O app web (`hangar ui`)
 
