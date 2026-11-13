@@ -49,7 +49,7 @@ class UiBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.llm = FakeLLM()
-        cls.srv, cls.app = server.make_server(0, bridge_extra={"base_url": cls.llm.url, "tier": "strong"})
+        cls.srv, cls.app = server.make_server(0, bridge_extra={"base_url": cls.llm.url, "tier": "strong", "model": "fake/model"})
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
         cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"
         cls.c = Client(cls.base, cls.app.token)
@@ -77,9 +77,32 @@ class UiBase(unittest.TestCase):
             time.sleep(0.1)
         raise AssertionError(f"event not seen; log has {[e.get('type') for e in self.events(sid)][-12:]}")
 
+    def offline_project(self) -> Path:
+        """A work folder whose own config sends `hangar run` (a separate process) to the scripted model."""
+        cwd = self.work()
+        (cwd / "hangar.toml").write_text(
+            'default_provider = "fake"\nmodel = "fake/model"\nlessons = false\n'
+            f'[providers.fake]\nbase_url = "{self.llm.url}"\napi_key_env = ""\n'
+            '[tiers]\n"fake/model" = "strong"\n', encoding="utf-8")
+        return cwd
+
+    def run_events(self, sid: str) -> list[dict]:
+        p = server.SESSIONS / sid / "events.jsonl"
+        return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()] if p.is_file() else []
+
+    def until_run(self, sid: str, pred, timeout: float = 60) -> dict:
+        end = time.time() + timeout
+        while time.time() < end:
+            for ev in self.run_events(sid):
+                if pred(ev):
+                    return ev
+            time.sleep(0.15)
+        raise AssertionError(f"run event not seen; log has {[e.get('type') for e in self.run_events(sid)][-14:]}")
+
     def new(self, cwd: Path, **over) -> str:
-        code, s = self.c.json("/api/sessions", {"cwd": str(cwd), "model": "fake/model", **over})
+        code, s = self.c.json("/api/sessions", {"cwd": str(cwd), **over})
         self.assertEqual(code, 200, s)
+        self.assertEqual((s["model"], s["effort"]), ("auto", over.get("effort", "low")))      # the harness picks the models; its own default effort
         return s["id"]
 
 
@@ -229,6 +252,37 @@ class ApiTests(UiBase):
         self.assertIn("src", d["dirs"])
 
 
+class WorkflowTests(UiBase):
+    def test_a_verify_run_goes_through_the_reviewer_and_back(self):
+        cwd = self.offline_project()
+        self.llm.script = [{"tool": "write", "args": {"path": "soma.py", "content": "def soma(a, b):\n    return a - b\n"}}, {"text": "Feito."},
+                           {"text": 'Li o arquivo.\n{"verdict": "revise", "feedback": "soma subtrai em vez de somar"}'},
+                           {"tool": "write", "args": {"path": "soma.py", "content": "def soma(a, b):\n    return a + b\n"}}, {"text": "Corrigido."},
+                           {"text": '{"verdict": "approve", "feedback": ""}'}]
+        self.assertEqual(self.c.json("/api/run", {"task": "x", "cwd": str(cwd), "workflow": "inventado"})[0], 400)
+        self.assertEqual(self.c.json("/api/run", {"task": "", "cwd": str(cwd), "workflow": "verify"})[0], 400)
+        code, r = self.c.json("/api/run", {"task": "crie soma.py", "cwd": str(cwd), "workflow": "verify", "permission": "auto", "effort": "low"})
+        self.assertEqual(code, 200, r)
+        sid = r["session"]
+        end = self.until_run(sid, lambda e: e["type"] == "session_end")
+        self.assertEqual(end["status"], "done")
+        evs = self.run_events(sid)
+        self.assertEqual([e["verdict"] for e in evs if e["type"] == "verdict"], ["revise", "approve"])
+        team = {m["role"]: m["model"] for m in next(e for e in evs if e["type"] == "team")["team"]}     # no model was sent: the run is on "auto"
+        self.assertEqual({m for r, m in team.items() if r != "perception"}, {"fake/model"})
+        self.assertEqual(self.c.json("/api/team?cwd=" + urllib.request.quote(str(cwd)))[1]["team"][0], {
+            "role": "worker", "model": "fake/model", "why": "faz a tarefa: o mais barato que resolveu todas as tarefas dos nossos benchmarks"})
+        self.assertEqual([(e["node"], e["visit"]) for e in evs if e["type"] == "node_start"], [("work", 1), ("review", 1), ("work", 2), ("review", 2)])
+        self.assertEqual((cwd / "soma.py").read_text(encoding="utf-8").splitlines()[1].strip(), "return a + b")
+        self.assertIn("soma subtrai", json.dumps(self.llm.requests[-2]["body"]["messages"]))      # the reviewer's feedback reached the worker
+        _, st = self.c.json("/api/state")
+        row = next(c for c in st["cli"] if c["id"] == sid)
+        self.assertEqual((row["workflow"], row["task"]), ("verify", "crie soma.py"))
+        req = urllib.request.Request(f"{self.base}/api/events?session={sid}&token={self.app.token}")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            self.assertIn('"type": "team"', resp.readline().decode())
+
+
 @unittest.skipUnless(B.find_browser(), "no Chrome/Edge for the browser test")
 class PageTests(UiBase):
     def setUp(self):
@@ -263,9 +317,12 @@ class PageTests(UiBase):
         self.wait("!!document.querySelector('[data-testid=new-cwd]')", what="new session view")
         set_value = "(s, v) => { const el = document.querySelector(s); el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }"
         b.eval(f"({set_value})('[data-testid=new-cwd]', {json.dumps(str(cwd))})")
-        b.eval(f"({set_value})('[data-testid=new-model]', 'fake/model')")
+        self.assertFalse(b.eval("!!document.querySelector('[data-testid=new-model]') || !!document.querySelector('.composer .model')"))   # no model picker
+        self.assertIn("o Hangar escolhe", self.text("[data-testid=team-box]"))
         self.click("[data-testid=create-session]")
         self.wait("!!document.querySelector('[data-testid=prompt]')", what="composer")
+        self.assertEqual(self.text("[data-testid=team-btn]"), "Modelos: automático")
+        self.assertEqual(self.text("[data-testid=status-model]"), "modelos automáticos")
 
         # --- a turn with a permission card
         self.llm.script = [{"thinking": "vou criar", "tool": "write", "args": {"path": "landing.html", "content": "<!doctype html>\n<h1>Lançamento 2026</h1>"}},
@@ -285,6 +342,12 @@ class PageTests(UiBase):
         self.assertEqual(b.eval("document.querySelector('[data-testid=tool]').dataset.status"), "ok")
         self.assertIn("+2", self.text("[data-testid=tool] .diff .stat"))
         self.assertFalse(b.eval("!!document.querySelector('[data-testid=working]')"))
+        self.assertEqual(self.text("[data-testid=status-model]"), "fake/model")             # the model that actually answered
+        self.click("[data-testid=team-btn]")
+        self.wait("!!document.querySelector('.modal table.team')", what="team table")
+        self.assertEqual(b.eval("document.querySelectorAll('.modal table.team tr').length"), 8)
+        self.assertIn("revisor independente", self.text(".modal table.team"))
+        b.eval("document.querySelector('.modal .mfoot button').click()")
 
         # --- side panels
         self.click("[data-testid=tab-files]")
@@ -375,6 +438,50 @@ class PageTests(UiBase):
         self.wait("!!document.querySelector('[data-testid=file-code]')", what="file after reload")
         (ROOT / "bench" / "logs").mkdir(parents=True, exist_ok=True)
         (ROOT / "bench" / "logs" / "ui-test.png").write_bytes(b.screenshot())
+
+
+    def test_a_pev_task_from_the_new_session_view(self):
+        cwd = self.offline_project()
+        b = self.b
+        b.goto(self.base + "/", settle_ms=400)
+        self.wait("!!document.querySelector('[data-testid=new-workflow]')", what="workflow select")
+        set_value = "(s, v) => { const el = document.querySelector(s); el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }"
+        self.assertEqual(self.text("[data-testid=create-session]"), "Criar sessão")
+        b.eval(f"({set_value})('[data-testid=new-workflow]', 'pev')")
+        self.assertFalse(b.eval("!!document.querySelector('[data-testid=new-planner]')"))    # planner and reviewer come from the team
+        self.assertIn("planeja", self.text("[data-testid=wf-hint]"))
+        self.assertEqual(self.text("[data-testid=create-session]"), "Iniciar tarefa")
+        b.eval(f"({set_value})('[data-testid=new-cwd]', {json.dumps(str(cwd))})")
+        b.eval(f"({set_value})('[data-testid=new-perm]', 'auto')")
+        self.click("[data-testid=create-session]")                                        # no task yet: nothing starts
+        self.wait("document.getElementById('toast').textContent.includes('Descreva a tarefa')", what="empty task warning")
+        self.llm.script = [{"text": "1. Criar ola.txt com a palavra ola.\nACCEPTANCE: o arquivo existe."},
+                           {"tool": "write", "args": {"path": "ola.txt", "content": "ola"}}, {"text": "Criei ola.txt."},
+                           {"text": '{"verdict": "approve", "feedback": ""}'}]
+        b.eval(f"({set_value})('[data-testid=new-prompt]', 'crie ola.txt')")
+        self.click("[data-testid=create-session]")
+        self.wait("document.querySelectorAll('[data-testid=stage]').length === 3", timeout=60, what="three stages in the chat")
+        self.assertEqual(b.eval("[...document.querySelectorAll('[data-testid=stage]')].map(s => s.textContent)"),
+                         ["Planejamento", "Execução", "Revisão independente"])
+        self.wait("!!document.querySelector('[data-testid=verdict]')", timeout=60, what="verdict line")
+        self.assertIn("aprovado", self.text("[data-testid=verdict]"))
+        self.assertEqual((cwd / "ola.txt").read_text(), "ola")
+        self.assertIn("ACCEPTANCE", self.text("[data-testid=chat]"))                    # the planner's plan is shown
+        self.assertIn("executor model · planejador model · revisor model", self.text("[data-testid=team-line]"))
+        # the graph opened by itself, with one lane per stage
+        self.wait("document.querySelectorAll('#flowhost .fnode.k-head').length === 3", what="three lanes")
+        heads = b.eval("[...document.querySelectorAll('#flowhost .fnode.k-head .t1')].map(t => t.textContent)")
+        self.assertEqual(heads, ["plan", "execute", "review"])
+        lanes = b.eval("[...document.querySelectorAll('#flowhost .fnode')].map(g => [g.querySelector('.t1').textContent, Math.round(g.transform.baseVal[0].matrix.e)])")
+        x = dict(lanes)
+        self.assertEqual(x["revisor: aprova"], x["review"])                              # the verdict sits in the reviewer's lane
+        self.assertNotIn('"verdict"', self.text("[data-testid=chat]"))                  # said once, as "Revisor: aprovado."
+        self.assertEqual(self.text("[data-testid=chat]").count("Criei ola.txt."), 1)
+        self.wait("document.getElementById('clistop').hidden", timeout=30, what="stop button gone when the run ends")
+        self.assertIn("Planejar, executar e revisar", self.text(".composer"))
+        self.wait("!document.querySelector('[data-testid=working]')", timeout=30, what="run finished")
+        self.assertEqual([e for e in b.errors if "favicon" not in str(e)], [])
+        (ROOT / "bench" / "logs" / "ui-workflow.png").write_bytes(b.screenshot())
 
 
 if __name__ == "__main__":

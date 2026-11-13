@@ -36,7 +36,7 @@
     const isSub = /^sub\d+$/.test(agent), st = S.pendingStage;
     const isMain = agent === 'work' || agent === 'main';
     const title = isSub ? 'sub-agente ' + agent.slice(3) : st ? st.node + (st.visit > 1 ? ' #' + st.visit : '') : isMain ? 'agente principal' : agent;
-    const head = addNode(L, {kind: 'head', title, sub: isSub ? 'contexto próprio' : (S.models[st && st.node] || (isMain && S.model) || '').split('/').pop()}, true);
+    const head = addNode(L, {kind: 'head', title, sub: isSub ? ((S.subs || {})[agent] || 'contexto próprio') : (S.models[st && st.node] || (isMain && S.model) || '').split('/').pop()}, true);
     if (isSub) {
       const parent = S.pendingTask.shift();
       if (parent) S.edges.push({a: parent, b: head, cross: true, label: 'delega'});
@@ -60,6 +60,7 @@
     const a = ev.agent || 'main';
     switch (ev.type) {
       case 'session_start': S.model = ev.model || S.model; return;
+      case 'subagent': S.subs = S.subs || {}; S.subs[ev.agent] = (ev.level && ev.level !== 'standard' ? (ev.level === 'light' ? 'leve · ' : 'profundo · ') : '') + String(ev.model || '').split('/').pop(); return;
       case 'user': {                                    // a chat turn (the web app's own marker)
         if (ev.model) S.model = ev.model;
         S.status = 'running'; S.lastText = '';
@@ -102,7 +103,8 @@
       case 'question': { if (ev.kind === 'approval' && S.questions['p:' + ev.qid]) return; const L = S.lastLane || lane(a);
         S.questions[ev.qid] = addNode(L, {kind: 'ask', title: ev.kind === 'approval' ? 'aprovação' : 'pergunta', sub: clip(ev.question, 25), status: 'run', tip: ev.question}, true); break; }
       case 'answer': { const n = S.questions[ev.qid]; if (n) { n.status = 'ok'; n.sub = clip('→ ' + (ev.answer ?? 'sem resposta'), 25); n.tip += '\n→ ' + ev.answer; } break; }
-      case 'verdict': addNode(S.curStage || S.lastLane || lane(a), {kind: 'verdict', title: 'revisor: ' + (ev.verdict === 'approve' ? 'aprova' : 'rejeita'),
+      case 'verdict': if (!S.stageTouched && ev.node) lane(ev.node);       // a reviewer that called no tool still gets its lane
+        addNode(S.curStage || S.lastLane || lane(a), {kind: 'verdict', title: 'revisor: ' + (ev.verdict === 'approve' ? 'aprova' : 'rejeita'),
                                sub: clip(ev.feedback || '', 25), status: ev.verdict === 'approve' ? 'ok' : 'err', tip: ev.feedback || ''}, true); break;
       case 'notice': {
         const t = ev.text || '';

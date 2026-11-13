@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.1
+
+- **Equipe de modelos automática** (`model = "auto"`, `hangar run -m auto`): o harness escolhe o modelo de cada papel pelo
+  custo por tarefa resolvida nos nossos benchmarks — executor barato, planejador forte, revisor de outro fornecedor,
+  reforço que assume quando o executor trava, e modelos próprios para resumir contexto e perceber mídia. Cada papel pode
+  ser trocado na tabela `[team]` da configuração.
+- **Sub-agentes por nível**: a ferramenta `task` aceita `level` — `light` (busca, leitura, resumo: modelo mais barato) ou
+  `deep` (raciocínio difícil: modelo mais forte). Quem delega decide quanto vale gastar.
+- **App web sem seletor de modelo**: toda sessão roda na equipe automática; o botão "Modelos: automático" mostra quem faz
+  o quê, e a linha de status mostra o modelo que respondeu.
+- App web alinhado ao desenho do harness: esforço padrão do harness (baixo) em vez de alto; teto de custo por rodada, e
+  não pela conversa inteira; lições aprendidas e regras de fim de sessão ao fechar a conversa; resumo de contexto no
+  modelo auxiliar, e não no principal.
+- **Modos de trabalho na tela de nova sessão**: além de Conversa, agora dá para iniciar pela interface uma tarefa em
+  **Executar e revisar** (`verify`: um revisor independente confere e devolve para correção) ou **Planejar, executar e
+  revisar** (`pev`: um modelo planeja, outro executa, um revisor confere), com modelo opcional para o planejador/revisor.
+- A tarefa aparece com um divisor por etapa (Planejamento, Execução, Revisão independente), o veredito do revisor e o
+  grafo ao vivo aberto, com uma raia por etapa.
+- Grafo: o veredito fica na raia do revisor mesmo quando ele não chama nenhuma ferramenta.
+
 ## v0.4.0
 
 - **Novo app web** (`hangar ui`), com a mesma cara do Agent Hangar Desktop: barra lateral de sessões (nova, buscar, fixar,

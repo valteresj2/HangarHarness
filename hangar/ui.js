@@ -45,6 +45,12 @@
   const EFFORTS = {low: 'Baixo', medium: 'Médio', high: 'Alto'};
   const TABS = [['terminal', 'Terminal'], ['changes', 'Alterações'], ['files', 'Arquivos'], ['browser', 'Navegador'],
                 ['artifacts', 'Artifacts'], ['harness', 'Harness'], ['flow', 'Grafo']];
+  const STAGE = {plan: 'Planejamento', execute: 'Execução', work: 'Execução', review: 'Revisão independente'};
+  const WORKFLOWS = {
+    chat: ['Conversa', 'Você conversa com o agente em vários turnos e aprova cada ação.'],
+    verify: ['Executar e revisar', 'O agente faz a tarefa e um revisor independente, sem o histórico, confere o resultado; se reprovar, o agente corrige (até 3 vezes).'],
+    pev: ['Planejar, executar e revisar', 'Um modelo planeja (somente leitura), outro executa o plano e um revisor independente confere. Bom para tarefas grandes com modelo barato na execução.']
+  };
   const TOOL_LABEL = {read: 'Ler', write: 'Escrever', edit: 'Editar', shell: 'Bash', glob: 'Buscar arquivos', grep: 'Procurar', web_fetch: 'Abrir página',
                       web_search: 'Pesquisar', task: 'Agente', skill: 'Skill', perceive: 'Perceber', process: 'Processo', note: 'Nota', mcp_call: 'MCP', ask_user: 'Pergunta'};
 
@@ -138,8 +144,22 @@
       if (b) { this.workEl = h('div', {class: 'working', 'data-testid': 'working'}, h('span', {class: 'spinner'}), 'Trabalhando…'); this.root.append(this.workEl); }
     }
     on(ev) {
-      const main = isMain(ev);
+      const main = this.readonly ? !/^sub\d+$/.test(ev.agent || '') : isMain(ev);
       switch (ev.type) {
+        case 'node_start':
+          if (this.readonly && S.cur && S.cur.workflow && S.cur.workflow !== 'loop')
+            this.add(h('div', {class: 'stage', 'data-testid': 'stage'}, `${STAGE[ev.node] || ev.node}${ev.visit > 1 ? ` · tentativa ${ev.visit}` : ''}`));
+          break;
+        case 'verdict': {
+          const ok = ev.verdict === 'approve';
+          this.add(h('div', {class: 'sys ' + (ok ? 'ok' : 'err'), 'data-testid': 'verdict'},
+            ok ? 'Revisor: aprovado.' : `Revisor: pediu ajustes — ${ev.feedback || 'sem detalhes'}`));
+          break; }
+        case 'team':
+          if (this.readonly) this.add(h('div', {class: 'sys', 'data-testid': 'team-line'}, 'Equipe: ' + (ev.team || []).filter(m => ['worker', 'planner', 'verifier', 'escalation'].includes(m.role))
+            .map(m => `${{worker: 'executor', planner: 'planejador', verifier: 'revisor', escalation: 'reforço'}[m.role]} ${String(m.model).split('/').pop()}`).join(' · ')));
+          break;
+        case 'subagent': if (ev.level && ev.level !== 'standard') this.add(h('div', {class: 'sys'}, `Sub-agente ${ev.level === 'light' ? 'leve' : 'profundo'}: ${String(ev.model).split('/').pop()}`)); break;
         case 'session_start':
           if (this.readonly && ev.task) this.add(h('div', {class: 'msg-user'}, ev.task));
           if (this.readonly) this.setBusy(true);
@@ -168,9 +188,14 @@
           this.streamThink = null; break; }
         case 'assistant': case 'final': {
           if (!main || !String(ev.text || '').trim()) break;
-          if (ev.type === 'final' && this.lastAssistant === ev.text) break;
+          this.said = this.said || new Set();
+          if (ev.type === 'final' && this.said.has(ev.text)) break;
+          this.said.add(ev.text);
+          // a reviewer ends with its verdict as JSON: the "Revisor: …" line says it, so the raw JSON is not repeated
+          const shown = this.readonly ? String(ev.text).replace(/\s*\{\s*"verdict"[^{}]*\}\s*$/, '') : ev.text;
+          if (!shown.trim()) { if (this.stream) { this.stream.remove(); this.stream = null; } break; }
           const d = this.stream || h('div', {class: 'md'});
-          d.className = 'md'; d.dataset.testid = 'assistant-msg'; d.innerHTML = md(ev.text); this.lastAssistant = ev.text;
+          d.className = 'md'; d.dataset.testid = 'assistant-msg'; d.innerHTML = md(shown);
           if (!this.stream) this.add(d);
           this.stream = null; if (this.workEl) this.root.append(this.workEl); break; }
         case 'tool_start': if (main) this.toolStart(ev); break;
@@ -250,6 +275,7 @@
       for (const t of Object.values(this.tools)) if (t.dot.className === 'dot run') t.dot.className = 'dot';
       for (const k of Object.keys(this.cards)) { this.cards[k].remove(); delete this.cards[k]; }
       const status = ev.status;
+      if (ev.type === 'session_end' && $('clistop')) $('clistop').hidden = true;
       if (status === 'interrupted' || status === 'stopped') this.add(h('div', {class: 'sys'}, 'Interrompido.'));
       else if (status === 'incomplete') this.add(h('div', {class: 'sys err'}, `A tarefa não foi concluída: ${ev.error || 'limite atingido'}.`));
       else if (status === 'error' && ev.error && ev.error !== 'process exited') this.add(h('div', {class: 'errbox', 'data-testid': 'error'}, ev.error));
@@ -315,9 +341,9 @@
         h('span', {class: 't'}, hit.title), h('span', {class: 'm'}, hit.snippet))) : [h('div', {class: 'sb-empty'}, 'Nada encontrado.')]));
     else scroll.append(...section('recent', 'Recentes', active, row, 'Nenhuma sessão ainda.').flat().filter(Boolean),
       ...section('arch', 'Arquivadas', arch, row, 'Nenhuma sessão arquivada.').flat().filter(Boolean),
-      ...section('cli', 'Execuções do CLI', st.cli || [], c => h('button', {class: 'sess' + (S.cur && S.cur.id === c.id ? ' on' : ''), onclick: () => openCli(c)},
+      ...section('cli', 'Tarefas e execuções do CLI', st.cli || [], c => h('button', {class: 'sess' + (S.cur && S.cur.id === c.id ? ' on' : ''), onclick: () => openCli(c)},
         c.status === 'running' ? h('span', {class: 'dot working'}) : null, h('span', {class: 't'}, c.task || c.id),
-        h('span', {class: 'm'}, `${String(c.model || '').split('/').pop()} · ${c.workflow || ''} · $${(+c.cost || 0).toFixed(4)}`)), 'Rodadas de `hangar run` aparecem aqui.').flat().filter(Boolean));
+        h('span', {class: 'm'}, `${String(c.model || '').split('/').pop()} · ${c.workflow || ''} · $${(+c.cost || 0).toFixed(4)}`)), 'Tarefas com revisão e rodadas de `hangar run` aparecem aqui.').flat().filter(Boolean));
     const focused = document.activeElement && document.activeElement.dataset.testid === 'search';
     sb.replaceChildren(
       h('div', {class: 'sb-top'},
@@ -437,14 +463,37 @@
     const d = S.state.defaults || {};
     const lastCwd = localStorage.getItem('hangarCwd') || d.cwd || '';
     const cwd = h('input', {class: 'field mono', value: lastCwd, 'data-testid': 'new-cwd'});
-    const model = h('input', {class: 'field mono', value: localStorage.getItem('hangarModel') || d.model || '', list: 'models', 'data-testid': 'new-model'});
     const perm = h('select', {class: 'field', 'data-testid': 'new-perm'}, Object.entries(PERMS).map(([v, l]) => h('option', {value: v, selected: v === (localStorage.getItem('hangarPerm') || 'ask')}, l)));
-    const effort = h('select', {class: 'field'}, Object.entries(EFFORTS).map(([v, l]) => h('option', {value: v, selected: v === 'high'}, 'Esforço: ' + l)));
+    const effort = h('select', {class: 'field'}, Object.entries(EFFORTS).map(([v, l]) => h('option', {value: v, selected: v === (d.effort || 'low')}, 'Esforço: ' + l)));
+    const teamBox = h('details', {class: 'teambox', 'data-testid': 'team-box'}, h('summary', null, 'Modelos: o Hangar escolhe o melhor custo-benefício para cada papel'));
+    const loadTeam = () => api('/api/team?cwd=' + encodeURIComponent(cwd.value.trim())).then(r => teamBox.replaceChildren(teamBox.firstChild, teamTable(r))).catch(() => {});
     const text = h('textarea', {class: 'field', placeholder: 'O que você quer fazer? (pode deixar em branco e escrever depois)', 'data-testid': 'new-prompt'});
+    const wfHint = h('div', {class: 'hint', 'data-testid': 'wf-hint'});
+    const wf = h('select', {class: 'field', 'data-testid': 'new-workflow', onchange: () => syncWf()},
+      Object.entries(WORKFLOWS).map(([v, [l]]) => h('option', {value: v, selected: v === (localStorage.getItem('hangarWorkflow') || 'chat')}, l)));
+    const syncWf = () => {
+      const chat = wf.value === 'chat';
+      wfHint.textContent = WORKFLOWS[wf.value][1];
+      text.placeholder = chat ? 'O que você quer fazer? (pode deixar em branco e escrever depois)' : 'Descreva a tarefa completa: neste modo ela roda até o fim, sem conversa.';
+      createBtn.textContent = chat ? 'Criar sessão' : 'Iniciar tarefa';
+    };
+    const createBtn = h('button', {class: 'btn primary', 'data-testid': 'create-session', onclick: () => go()}, 'Criar sessão');
     const go = async () => {
+      if (wf.value !== 'chat') {
+        if (!text.value.trim()) { text.focus(); return toast('Descreva a tarefa: este modo roda do começo ao fim, sem conversa.'); }
+        try {
+          const r = await api('/api/run', {task: text.value.trim(), cwd: cwd.value.trim(), workflow: wf.value, permission: perm.value, effort: effort.value});
+          localStorage.setItem('hangarCwd', cwd.value.trim()); localStorage.setItem('hangarWorkflow', wf.value);
+          S.collapsed.cli = false;
+          openCli({id: r.session, task: text.value.trim(), model: 'auto', workflow: wf.value, cwd: cwd.value.trim(), status: 'running'});
+          openSide('flow');
+        } catch (e) { fail(e); }
+        return;
+      }
+      localStorage.setItem('hangarWorkflow', 'chat');
       try {
-        const s = await api('/api/sessions', {cwd: cwd.value.trim(), model: model.value.trim(), permission: perm.value, effort: effort.value});
-        localStorage.setItem('hangarCwd', s.cwd); localStorage.setItem('hangarModel', s.model); localStorage.setItem('hangarPerm', s.permission);
+        const s = await api('/api/sessions', {cwd: cwd.value.trim(), permission: perm.value, effort: effort.value});
+        localStorage.setItem('hangarCwd', s.cwd); localStorage.setItem('hangarPerm', s.permission);
         await refresh(); await openSession(s);
         if (text.value.trim()) send(text.value.trim());
       } catch (e) { fail(e); }
@@ -454,12 +503,14 @@
       h('h1', null, 'Nova sessão'),
       S.state.hasKey === false ? h('div', {class: 'warn'}, 'Nenhuma chave do provedor foi encontrada. Defina OPENROUTER_API_KEY no ambiente ou num arquivo .env antes de enviar.') : null,
       h('div', null, h('label', null, 'Pasta de trabalho'), h('div', {style: 'display:flex;gap:8px'}, cwd,
-        h('button', {class: 'btn', onclick: () => pickFolder(cwd.value, p => { cwd.value = p; })}, 'Escolher…'))),
-      h('div', {class: 'two'}, h('div', null, h('label', null, 'Modelo'), model), h('div', null, h('label', null, 'Permissões'), perm), h('div', null, h('label', null, 'Esforço'), effort)),
-      h('div', null, h('label', null, 'Primeira mensagem'), text),
-      h('div', {style: 'display:flex;gap:10px;align-items:center'}, h('button', {class: 'btn primary', 'data-testid': 'create-session', onclick: go}, 'Criar sessão'),
+        h('button', {class: 'btn', onclick: () => pickFolder(cwd.value, p => { cwd.value = p; loadTeam(); })}, 'Escolher…'))),
+      h('div', {class: 'two'}, h('div', null, h('label', null, 'Modo de trabalho'), wf), h('div', null, h('label', null, 'Permissões'), perm), h('div', null, h('label', null, 'Esforço'), effort)),
+      wfHint, teamBox,
+      h('div', null, h('label', null, 'Tarefa'), text),
+      h('div', {style: 'display:flex;gap:10px;align-items:center'}, createBtn,
         h('span', {class: 'hint'}, 'O agente trabalha nessa pasta; cada sessão guarda a própria conversa.')),
       h('datalist', {id: 'models'}, S.models.map(m => h('option', {value: m}))))));
+    syncWf(); loadTeam();
     text.focus();
   }
 
@@ -502,14 +553,16 @@
     renderStatus();
   }
   function cliBar() {
-    return h('div', {class: 'composer'}, h('div', {class: 'bar'}, h('span', {class: 'muted'}, 'Rodada iniciada pelo CLI: somente leitura.'), h('span', {class: 'grow'}),
-      h('button', {class: 'btn stopbtn', onclick: () => api('/api/stop', {session: S.cur.id}).catch(fail)}, '■ Parar')));
+    const wfName = S.cur.workflow && S.cur.workflow !== 'loop' && WORKFLOWS[S.cur.workflow] ? WORKFLOWS[S.cur.workflow][0] : '';
+    return h('div', {class: 'composer'}, h('div', {class: 'bar'}, h('span', {class: 'muted'},
+      wfName ? `${wfName}: a tarefa roda até o fim. As etapas aparecem aqui e no Grafo.` : 'Rodada iniciada pelo CLI: somente leitura.'), h('span', {class: 'grow'}),
+      h('button', {class: 'btn stopbtn', id: 'clistop', hidden: S.cur.status && S.cur.status !== 'running', onclick: () => api('/api/stop', {session: S.cur.id}).catch(fail)}, '■ Parar')));
   }
   function renderStatus() {
     const box = $('statusline'); if (!box || !S.cur) return;
     const l = (S.chat && S.chat.last) || {}, s = S.cur;
     const ctx = l.context_window ? Math.round(100 * (l.context_tokens || 0) / l.context_window) : 0;
-    box.replaceChildren(h('span', null, s.model || ''), h('span', null, short(s.cwd || '')),
+    box.replaceChildren(h('span', {'data-testid': 'status-model'}, l.model || (s.model && s.model !== 'auto' ? s.model : 'modelos automáticos')), h('span', null, short(s.cwd || '')),
       s.cost ? h('span', null, 'sessão ' + money(s.cost)) : null,
       h('span', {class: 'ctx'}, h('span', {class: 'ctxbar'}, h('i', {style: `width:${Math.min(100, ctx)}%`})), `${ctx}% do contexto`));
   }
@@ -528,7 +581,7 @@
     const chips = h('div', {class: 'chips', id: 'atts'});
     const file = h('input', {type: 'file', multiple: true, hidden: true, 'data-testid': 'file-input', onchange: e => { uploadFiles([...e.target.files]); e.target.value = ''; }});
     const up = patch => api(sapi('update'), patch).then(r => { Object.assign(S.cur, r); renderStatus(); }).catch(fail);
-    const model = h('input', {class: 'model', value: s.model, list: 'models', title: 'Modelo', 'aria-label': 'Modelo', onchange: e => e.target.value.trim() && up({model: e.target.value.trim()})});
+    const model = h('button', {class: 'teambtn', title: 'Quem faz o quê nesta sessão', 'data-testid': 'team-btn', onclick: showTeam}, 'Modelos: automático');
     const effort = h('select', {title: 'Esforço', 'aria-label': 'Esforço', onchange: e => up({effort: e.target.value})},
       Object.entries(EFFORTS).map(([v, l]) => h('option', {value: v, selected: v === (s.effort || 'high')}, 'Esforço: ' + l)));
     const perm = h('select', {title: 'Permissões', 'aria-label': 'Permissões', 'data-testid': 'perm', onchange: e => up({permission: e.target.value})},
@@ -556,6 +609,18 @@
     box.addEventListener('drop', e => uploadFiles([...(e.dataTransfer?.files || [])]));
     setTimeout(() => { syncBusy(); renderAtts(); renderRec(); ta.focus(); }, 0);
     return box;
+  }
+  function teamTable(r) {
+    if (!r.team || !r.team.length) return h('div', {class: 'hint'}, r.error || 'A equipe é definida ao iniciar a sessão.');
+    return h('table', {class: 'team'}, r.team.map(m => h('tr', null, h('td', {class: 'mono'}, String(m.model).split('/').pop()), h('td', null, m.why))));
+  }
+  async function showTeam() {
+    const s = S.cur; let r = {team: s.team};
+    if (!s.team) r = await api('/api/team?cwd=' + encodeURIComponent(s.cwd || '')).catch(e => ({team: [], error: e.message}));
+    modal('Equipe de modelos', [h('div', {class: 'muted'}, s.model && s.model !== 'auto' ? `Esta sessão usa o modelo fixo ${s.model}.`
+        : 'O Hangar escolhe o modelo de cada papel pelo custo por tarefa resolvida nos nossos benchmarks, e só paga pelo modelo forte quando ele muda o resultado.'),
+      teamTable(r), h('div', {class: 'hint'}, 'Para trocar um papel, use a tabela [team] em ~/.hangar/config.toml ou no hangar.toml do projeto.')],
+      [{label: 'Fechar', cls: 'primary'}]);
   }
   function renderAtts() {
     const box = $('atts'); if (!box) return;

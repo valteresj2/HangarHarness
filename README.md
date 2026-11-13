@@ -70,6 +70,32 @@ python -m hangar studio pptx deck.json deck.pptx                                
 - **Imagem**: padrão `google/gemini-3.1-flash-image` (cerca de US$ 0,07 por imagem); o gasto entra na conta da sessão.
 - Requisitos: Chrome ou Edge para captura/vídeo, ffmpeg para vídeo, chave do OpenRouter para imagem.
 
+## Equipe de modelos: o harness escolhe quem faz o quê
+
+Com `model = "auto"` (o padrão do app web; no CLI, `hangar run -m auto "…"`) o harness monta a equipe sozinho:
+
+| Papel | Modelo padrão | Por quê |
+|---|---|---|
+| executor | `openai/gpt-6-luna` | o mais barato que resolveu todas as tarefas dos nossos benchmarks |
+| sub-agente leve (`level: light`) | `openai/gpt-6-luna` | busca, leitura e resumo |
+| sub-agente profundo (`level: deep`) | `openai/gpt-6.1-terra` | raciocínio difícil, desenho, depuração |
+| planejador (`pev`) | `openai/gpt-6.1-terra` | o plano orienta todo o resto |
+| revisor (`verify`, `pev`) | `anthropic/claude-haiku-5.5` | de outro fornecedor que o executor: não divide os mesmos pontos cegos |
+| reforço | `anthropic/claude-sonnet-5.5` | assume a conversa só quando o executor trava |
+| auxiliar | `openai/gpt-6-luna` | resumo de contexto e lições |
+| percepção | `meta/muse-ember` | imagem, áudio e vídeo |
+
+A lista vem dos resultados em [docs/BENCHMARK.md](docs/BENCHMARK.md); se um modelo sair do catálogo, o próximo da fila
+assume. Para trocar um papel:
+
+```toml
+[team]
+worker = "anthropic/claude-haiku-5.5"
+deep = ["openai/gpt-6.1-terra", "anthropic/claude-sonnet-5.5"]
+```
+
+Com um modelo fixo (`-m openai/gpt-6-luna`) nada é roteado: é a sua escolha para tudo.
+
 ## O app web (`hangar ui`)
 
 ```bash
@@ -81,6 +107,8 @@ Abre em `http://127.0.0.1:3090` uma interface completa, com o mesmo desenho do A
 - **Sessões** na barra lateral (buscar, fixar, renomear, arquivar), cada uma com a sua pasta, modelo, esforço e modo de
   permissão. A conversa continua depois de fechar e reabrir.
 - **Conversa** com streaming, diff das edições, cartões de permissão e de pergunta, lista de tarefas e custo por rodada.
+- **Modos de trabalho**: Conversa (vários turnos), Executar e revisar (`verify`) ou Planejar, executar e revisar (`pev`);
+  nos dois últimos a tarefa roda até o fim, com um revisor independente, e cada etapa aparece na conversa e no grafo.
 - **Anexos e gravação**: anexe arquivos (botão, arrastar, colar imagem) ou grave a tela e o microfone pelo navegador;
   a gravação vira um anexo `.webm`. Para o modelo entender vídeo e áudio é preciso o `ffmpeg` e um modelo de percepção.
 - **Painéis**: Terminal, Alterações (git), Arquivos, Navegador, Artifacts, Harness e Grafo ao vivo.

@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, config, lessons, media, project, skills
+from . import __version__, config, lessons, media, project, router, skills
 from .models import Catalog
 from .session import SESSIONS
 from .tools import SKIP_DIRS
@@ -146,7 +146,7 @@ class Live:
                 continue
             t = ev.get("type")
             if t == "ready":
-                store.patch(self.sid, hangarSessionId=ev.get("session"), contextWindow=ev.get("context_window"))
+                store.patch(self.sid, hangarSessionId=ev.get("session"), contextWindow=ev.get("context_window"), team=ev.get("team"))
                 self.ready.set()
                 continue
             if t == "options":
@@ -178,7 +178,7 @@ class Live:
         if self.alive():
             self.send({"type": "close"})
             try:
-                self.proc.wait(timeout=6)
+                self.proc.wait(timeout=25)              # closing may write a lesson (one short model call)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
         if self.proc:
@@ -217,7 +217,8 @@ class App:
             raise ApiError(400, f"pasta não encontrada: {cwd}")
         sid = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(3)
         s = {"id": sid, "title": str(data.get("title") or "Nova sessão").strip()[:120] or "Nova sessão", "cwd": str(cwd.resolve()),
-             "model": str(data.get("model") or cfg["model"]), "effort": data.get("effort") if data.get("effort") in EFFORTS else "high",
+             "model": str(data.get("model") or "auto"),
+             "effort": data.get("effort") if data.get("effort") in EFFORTS else (cfg["reasoning_effort"] if cfg["reasoning_effort"] in EFFORTS else "low"),
              "permission": data.get("permission") if data.get("permission") in PERMISSIONS else "ask",
              "pinned": False, "archived": False, "unread": False, "status": "idle", "cost": 0, "createdAt": _now(), "updatedAt": _now()}
         with self.store.lock:
@@ -338,7 +339,8 @@ class App:
                 live = self.live.get(s["id"])
                 s["busy"] = bool(live and live.busy)
         return {"version": __version__, "sessions": sessions, "cli": cli,
-                "defaults": {"model": cfg["model"], "cwd": str(Path.cwd()), "permission": "ask", "effort": "high"},
+                "defaults": {"model": "auto", "cwd": str(Path.cwd()), "permission": "ask",
+                             "effort": cfg["reasoning_effort"] if cfg["reasoning_effort"] in EFFORTS else "low"},
                 "hasKey": bool(os.environ.get(cfg["providers"].get(cfg["default_provider"], {}).get("api_key_env") or "") or
                                not cfg["providers"].get(cfg["default_provider"], {}).get("api_key_env"))}
 
@@ -613,6 +615,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(app.state())
             if u.path == "/api/models":
                 return self._json(app.models())
+            if u.path == "/api/team":                       # who does what when the harness picks the models
+                cwd = Path(one("cwd")) if one("cwd") and Path(one("cwd")).is_dir() else None
+                cfg = config.load(cwd)
+                try:
+                    return self._json({"team": router.describe(router.team(cfg, Catalog(cfg)))})
+                except ValueError as e:
+                    return self._json({"team": [], "error": str(e)})
             if u.path == "/api/dirs":
                 return self._json(_dirs(one("path")))
             if u.path == "/api/events":                     # a run started elsewhere (CLI, benchmark): its own log
@@ -850,12 +859,19 @@ def _run_cli(data: dict) -> dict:
         raise ApiError(400, f"folder not found: {cwd}")
     sid = time.strftime("%Y%m%d-%H%M%S-ui") + str(int(time.time() * 1000) % 1000)
     cmd = [sys.executable, "-m", "hangar", "run", task, "--ui", "--quiet", "--session-id", sid, "--cwd", str(cwd)]
-    if data.get("model"):
-        cmd += ["-m", str(data["model"])]
+    cmd += ["-m", str(data.get("model") or "auto")]
     if data.get("workflow"):
         cmd += ["-w", str(data["workflow"])]
     if data.get("planner"):
         cmd += ["--planner", str(data["planner"])]
+    if data.get("verifier"):
+        cmd += ["--verifier", str(data["verifier"])]
+    if data.get("permission") in PERMISSIONS:
+        cmd += ["--permission", str(data["permission"])]
+    if data.get("effort") in EFFORTS:
+        cmd += ["--effort", str(data["effort"])]
+    if data.get("workflow") not in (None, "", "loop", "verify", "pev"):
+        raise ApiError(400, "workflow desconhecido")
     for a in data.get("attachments") or []:
         if str(a).strip():
             cmd += ["-a", str(a).strip()]
