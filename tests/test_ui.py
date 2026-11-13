@@ -362,6 +362,32 @@ class PageTests(UiBase):
         kinds = b.eval("[...document.querySelectorAll('#flowhost .fnode')].map(g => [...g.classList].find(c => c.startsWith('k-')))")
         self.assertEqual(kinds, ["k-head", "k-user", "k-tool", "k-ask", "k-final"])
         self.assertIn("1 chamada de tool", self.text("#flowhost .flowinfo"))
+        # the canvas answers the mouse: wheel zooms at the pointer, drag moves it, double click fits
+        view = "(() => { const m = document.querySelector('#flowhost g.vp').transform.baseVal.consolidate().matrix; return [m.a, m.e, m.f].map(v => Math.round(v * 100) / 100); })()"
+        fire = '''(type, x, y, extra) => { const box = document.querySelector('#flowhost .flowscroll'), r = box.getBoundingClientRect();
+            const C = type === 'wheel' ? WheelEvent : type.startsWith('pointer') ? PointerEvent : MouseEvent;
+            const at = document.elementFromPoint(r.left + x, r.top + y);
+            (box.contains(at) ? at : box).dispatchEvent(new C(type, {bubbles: true, cancelable: true, clientX: r.left + x, clientY: r.top + y, button: 0, pointerId: 7, ...extra})); }'''
+        k0, x0, y0 = b.eval(view)
+        b.eval(f"({fire})('wheel', 100, 100, {{deltaY: -300}})")
+        k1, x1, y1 = b.eval(view)
+        self.assertGreater(k1, k0 * 1.4)
+        self.assertAlmostEqual((100 - x1) / k1, (100 - x0) / k0, delta=1.5)                  # the point under the pointer did not move
+        self.assertFalse(b.eval("document.querySelector('#flowFollow').checked"))            # the user took the camera
+        b.eval(f"({fire})('wheel', 100, 100, {{deltaY: 900}})")
+        self.assertLess(b.eval(view)[0], k1)
+        k2, x2, y2 = b.eval(view)
+        b.eval(f"(() => {{ const f = {fire}; f('pointerdown', 20, 300, {{}}); f('pointermove', 80, 340, {{}}); f('pointerup', 80, 340, {{}}); }})()")
+        self.assertEqual(b.eval(view), [k2, round(x2 + 60, 2), round(y2 + 40, 2)])
+        b.eval("document.querySelector('#flowhost button[data-z=\"1\"]').click()")
+        self.assertGreater(b.eval(view)[0], k2)
+        b.eval(f"({fire})('dblclick', 5, 5, {{}})")
+        kf, xf, yf = b.eval(view)
+        self.assertLessEqual(kf, 1)
+        self.assertTrue(b.eval(f"(() => {{ const r = document.querySelector('#flowhost .flowscroll').getBoundingClientRect(), n = [...document.querySelectorAll('#flowhost .fnode')]"
+                               ".map(g => g.getBoundingClientRect()); return n.every(q => q.left >= r.left - 1 && q.right <= r.right + 1 && q.top >= r.top - 1 && q.bottom <= r.bottom + 1); })()"))
+        b.eval("(() => { const g = document.querySelector('#flowhost .fnode.k-tool'), q = g.getBoundingClientRect(); g.dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: q.left + 5, clientY: q.top + 5})); })()")
+        self.wait("!document.querySelector('.flowdetail').hidden", what="node detail after a click")
         self.click("[data-testid=tab-terminal]")
         self.wait("!!document.querySelector('[data-testid=term-in]')")
         b.eval("(() => { const i = document.querySelector('[data-testid=term-in]'); i.value = 'echo ola-do-terminal'; "

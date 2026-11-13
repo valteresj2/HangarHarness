@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.2
+
+- **Grafo ao vivo com o mouse**: arraste para mover a tela, roda do mouse para dar zoom no ponto do cursor, duplo clique no
+  fundo (ou "ajustar") para encaixar o grafo inteiro. Ao mexer, o "seguir" é desligado para a tela não pular.
+
 ## v0.4.1
 
 - **Equipe de modelos automática** (`model = "auto"`, `hangar run -m auto`): o harness escolhe o modelo de cada papel pelo

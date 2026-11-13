@@ -1,9 +1,12 @@
 /* Live workflow graph: built node by node from the same event stream as the timeline.
    One lane per agent (workflow stage or sub-agent); one row per model turn, so time flows downward
-   and tool calls made in the same turn sit side by side. Pure SVG, no dependencies. */
+   and tool calls made in the same turn sit side by side. Pure SVG, no dependencies.
+   The canvas is free: drag to move it, wheel to zoom at the pointer, double click to fit. */
 (() => {
   const NW = 172, NH = 38, GX = 12, GY = 24, PAD = 20, LANE_GAP = 44;
-  let S = null, raf = 0, scale = 1, follow = true, onPick = null, host = null;
+  const KMIN = 0.2, KMAX = 3;
+  let S = null, raf = 0, follow = true, onPick = null, host = null, W = 300, H = 0;
+  const view = {k: 1, x: 0, y: 0};                      // screen = graph * k + (x, y)
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
   const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
@@ -12,6 +15,7 @@
   function reset() {
     S = {lanes: [], laneBy: {}, nodes: [], edges: [], row: 0, byTool: {}, models: {}, pendingStage: null, stageTouched: true,
          curStage: null, stageLast: [], lastRoute: '', pendingTask: [], lastLane: null, questions: {}, status: 'running', model: '', lastText: ''};
+    view.k = 1; view.x = 0; view.y = 0;
     schedule();
   }
 
@@ -129,7 +133,7 @@
     const svg = host.querySelector('svg'), info = host.querySelector('.flowinfo');
     let x = PAD;
     S.lanes.forEach(L => { L.x = x; L.w = L.cols * (NW + GX) - GX; x += L.w + LANE_GAP; });
-    const W = Math.max(x - LANE_GAP + PAD, 300), H = PAD * 2 + Math.max(S.row, 1) * (NH + GY);
+    W = Math.max(x - LANE_GAP + PAD, 300); H = PAD * 2 + Math.max(S.row, 1) * (NH + GY);
     S.nodes.forEach(n => {
       const rowW = n.lane.rows[n.row] * (NW + GX) - GX;
       n.x = n.lane.x + (n.lane.w - rowW) / 2 + n.col * (NW + GX);
@@ -152,36 +156,94 @@
              `<text class="t1" x="15" y="15">${esc(clip(n.title, 22))}</text><text class="t2" x="15" y="29">${esc(n.sub || '')}</text>` +
              (n.ms != null ? `<text class="t3" x="${NW - 7}" y="15" text-anchor="end">${n.ms >= 1000 ? (n.ms / 1000).toFixed(1) + 's' : n.ms + 'ms'}</text>` : '') + '</g>';
     }
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('width', W * scale); svg.setAttribute('height', H * scale);
-    svg.innerHTML = out;
+    const defs = out.slice(0, out.indexOf('</defs>') + 7);
+    svg.innerHTML = defs + '<g class="vp">' + out.slice(defs.length) + '</g>';
     const tools = S.nodes.filter(n => n.kind === 'tool').length;
     info.textContent = S.nodes.length ? `${S.lanes.length} agente${S.lanes.length > 1 ? 's' : ''} · ${tools} chamada${tools !== 1 ? 's' : ''} de tool · ${S.row} passos`
                                       : 'O grafo aparece aqui conforme o agente trabalha.';
     const last = S.nodes[S.nodes.length - 1], box = host.querySelector('.flowscroll');
-    if (follow && last && S.status === 'running') {
-      box.scrollTop = Math.max(0, (last.y + NH) * scale - box.clientHeight + 60);
-      const left = last.x * scale, right = (last.x + NW) * scale;      // pan sideways only when the new node is off screen
-      if (left < box.scrollLeft || right > box.scrollLeft + box.clientWidth) box.scrollLeft = Math.max(0, left - 40);
+    if (follow && last && S.status === 'running' && box.clientHeight) {
+      view.y = Math.min(0, box.clientHeight - 60 - (last.y + NH) * view.k);
+      const left = view.x + last.x * view.k, right = left + NW * view.k;   // pan sideways only when the new node is off screen
+      if (left < 0 || right > box.clientWidth) view.x = Math.min(0, 40 - last.x * view.k);
     }
+    applyView();
+  }
+
+  function applyView() {
+    const g = host && host.querySelector('g.vp');
+    if (g) g.setAttribute('transform', `translate(${Math.round(view.x * 10) / 10},${Math.round(view.y * 10) / 10}) scale(${Math.round(view.k * 1000) / 1000})`);
+    const b = host && host.querySelector('button[data-z="0"]');
+    if (b) b.textContent = Math.round(view.k * 100) + '%';
+  }
+
+  function manual() {                                    // the user took the camera: stop following the newest node
+    if (!follow) return;
+    follow = false;
+    const c = host.querySelector('#flowFollow'); if (c) c.checked = false;
+  }
+
+  function zoomAt(px, py, k) {                           // keep the graph point under (px, py) where it is
+    k = Math.min(KMAX, Math.max(KMIN, k));
+    view.x = px - (px - view.x) * k / view.k; view.y = py - (py - view.y) * k / view.k; view.k = k;
+    applyView();
+  }
+
+  function fit() {
+    const box = host.querySelector('.flowscroll');
+    if (!box.clientWidth) return;
+    view.k = Math.min(1, Math.max(KMIN, Math.min((box.clientWidth - 16) / W, (box.clientHeight - 16) / H)));
+    view.x = (box.clientWidth - W * view.k) / 2; view.y = Math.max(8, (box.clientHeight - H * view.k) / 2);
+    applyView();
   }
 
   function mount(el, pick) {
     host = el; onPick = pick;
     host.innerHTML = '<div class="flowbar"><span class="flowinfo"></span><span class="sp"></span>' +
       '<label><input type="checkbox" id="flowFollow" checked> seguir</label>' +
-      '<button data-z="fit" title="Encaixar o grafo na largura">ajustar</button>' +
+      '<button data-z="fit" title="Encaixar o grafo inteiro na tela (ou duplo clique no fundo)">ajustar</button>' +
       '<button data-z="-1" title="Diminuir">−</button><button data-z="0" title="Tamanho real">100%</button><button data-z="1" title="Aumentar">+</button></div>' +
-      '<div class="flowscroll"><svg xmlns="http://www.w3.org/2000/svg"></svg></div>';
-    host.querySelector('#flowFollow').onchange = e => { follow = e.target.checked; };
+      '<div class="flowscroll" title="Arraste para mover · roda do mouse para zoom · duplo clique para ajustar"><svg xmlns="http://www.w3.org/2000/svg"></svg></div>';
+    const box = host.querySelector('.flowscroll');
+    host.querySelector('#flowFollow').onchange = e => { follow = e.target.checked; if (follow) schedule(); };
     host.querySelectorAll('button[data-z]').forEach(b => b.onclick = () => {
-      if (b.dataset.z === 'fit') {
-        const w = +(host.querySelector('svg').getAttribute('viewBox') || '0 0 300 0').split(' ')[2];
-        scale = Math.min(1, Math.max(0.3, (host.querySelector('.flowscroll').clientWidth - 8) / w));
-      } else { const z = +b.dataset.z; scale = z === 0 ? 1 : Math.min(2, Math.max(0.3, scale + z * 0.15)); }
-      host.querySelector('button[data-z="0"]').textContent = Math.round(scale * 100) + '%'; schedule();
+      manual();
+      if (b.dataset.z === 'fit') return fit();
+      const z = +b.dataset.z;
+      zoomAt(box.clientWidth / 2, box.clientHeight / 2, z === 0 ? 1 : view.k * (z > 0 ? 1.2 : 1 / 1.2));
     });
-    host.querySelector('svg').addEventListener('click', e => {
+
+    const at = e => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    box.addEventListener('wheel', e => {                 // wheel (and trackpad pinch) zooms at the pointer
+      e.preventDefault();
+      const d = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+      manual(); zoomAt(...at(e), view.k * Math.exp(-d * (e.ctrlKey ? 0.01 : 0.0015)));
+    }, {passive: false});
+
+    let drag = null, dragged = false;
+    box.addEventListener('pointerdown', e => {
+      if (e.button !== 0 && e.button !== 1) return;
+      drag = {x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, id: e.pointerId, moved: false};
+      dragged = false;
+      if (e.button === 1) e.preventDefault();
+    });
+    box.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved) {
+        if (Math.abs(dx) + Math.abs(dy) < 4) return;     // a click on a node stays a click
+        drag.moved = dragged = true; manual(); box.classList.add('panning');
+        try { box.setPointerCapture(drag.id); } catch { /* synthetic pointer */ }
+      }
+      view.x = drag.vx + dx; view.y = drag.vy + dy; applyView();
+    });
+    const end = () => { if (drag) { try { box.releasePointerCapture(drag.id); } catch { /* not captured */ } } drag = null; box.classList.remove('panning');
+                        setTimeout(() => { dragged = false; }, 0); };      // only the click that ends this drag is swallowed
+    box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+    box.addEventListener('dblclick', e => { if (!e.target.closest('.fnode')) { manual(); fit(); } });
+
+    box.addEventListener('click', e => {
+      if (dragged) { dragged = false; return; }          // the end of a drag is not a pick
       const g = e.target.closest('.fnode'); if (!g || !S) return;
       const n = S.nodes[+g.dataset.id]; if (n && onPick) onPick(n);
     });

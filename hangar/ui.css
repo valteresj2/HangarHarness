@@ -246,7 +246,8 @@ table.team td:first-child { white-space: nowrap; font-weight: 600; }
 .flowbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-elev); font: 12px var(--mono); color: var(--text-muted); flex-wrap: wrap; }
 .flowbar .sp { flex: 1; } .flowbar button { padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--r); font: 12px var(--mono); color: var(--text); }
 .flowbar label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-.flowscroll { flex: 1; overflow: auto; min-height: 0; padding: 4px 0 40px; } .flowscroll svg { display: block; }
+.flowscroll { flex: 1; overflow: hidden; min-height: 0; cursor: grab; touch-action: none; user-select: none; } .flowscroll.panning { cursor: grabbing; }
+.flowscroll svg { display: block; width: 100%; height: 100%; }
 .lanebg { fill: var(--bg-sunken); opacity: .55; }
 .edge { fill: none; stroke: var(--text-muted); stroke-width: 1.2; opacity: .7; } .edge.cross { stroke: var(--info); stroke-dasharray: 5 4; opacity: .9; }
 .arrhead { fill: var(--text-muted); }
