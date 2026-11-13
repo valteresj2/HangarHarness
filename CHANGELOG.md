@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.0
+
+- **Novo app web** (`hangar ui`), com a mesma cara do Agent Hangar Desktop: barra lateral de sessões (nova, buscar, fixar,
+  renomear, arquivar, excluir), conversa com streaming, cartões de ferramenta com diff, cartões de permissão (permitir,
+  permitir sempre, negar com motivo) e de pergunta, lista de tarefas fixada, linha de custo/tokens/contexto por rodada, tema
+  claro e escuro.
+- **Composer**: anexar arquivos (botão, arrastar e soltar, colar imagem), comandos de barra do projeto (`/`), menção de
+  arquivos (`@`), troca de modelo, esforço e modo de permissão por sessão, fila de mensagens e Parar.
+- **Gravação**: tela + microfone ou só microfone, direto do navegador, com pausar/continuar; o `.webm` vira anexo da mensagem.
+- **Painéis laterais**: Terminal (comandos na pasta da sessão), Alterações (git status e diff), Arquivos (árvore, filtro e
+  visualizador), Navegador (servidores locais), Artifacts (HTML, SVG, Markdown, imagens e vídeos que o agente criou),
+  Harness (instruções, sub-agentes, comandos, skills, hooks e lições, com editor) e **Grafo ao vivo**.
+- Cada sessão é um processo `hangar bridge`; a conversa é retomada depois de fechar o app. Rodadas do CLI continuam
+  aparecendo, em modo leitura.
+- Segurança: token por execução em toda chamada de API, checagem de host local, leitura de arquivos restrita à pasta da
+  sessão e artifacts servidos em sandbox (origem opaca).
+- Bridge: opção `lessons`. Navegador headless: `extra_args`.
+
 ## v0.3.0
 
 - **Superfície `.claude/` do projeto**: além de `CLAUDE.md`/`AGENTS.md`/`HANGAR.md` na raiz, o harness agora lê `.claude/CLAUDE.md`,

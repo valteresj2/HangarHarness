@@ -62,7 +62,7 @@ def _configure(start: dict) -> dict:
     overrides = {"permission": start.get("permission") if start.get("permission") in PERMISSIONS else "ask",
                  "reasoning_effort": start.get("effort"), "max_steps": start.get("max_steps"), "max_cost_usd": start.get("max_cost_usd")}
     cfg = config.load(cwd, overrides)
-    cfg["lessons"] = False                               # the host has its own lessons; do not double up
+    cfg["lessons"] = bool(start.get("lessons"))          # a host with its own lessons library leaves this off
     cfg["helper_model"] = str(start.get("model"))        # compaction runs on the profile's own model: no other is guaranteed
     cfg["system_append"] = str(start.get("system_append") or "")
     cfg["model_info"] = start.get("model_info") or {}

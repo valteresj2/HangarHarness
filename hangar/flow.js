@@ -11,7 +11,7 @@
 
   function reset() {
     S = {lanes: [], laneBy: {}, nodes: [], edges: [], row: 0, byTool: {}, models: {}, pendingStage: null, stageTouched: true,
-         curStage: null, stageLast: [], lastRoute: '', pendingTask: [], lastLane: null, questions: {}, status: 'running'};
+         curStage: null, stageLast: [], lastRoute: '', pendingTask: [], lastLane: null, questions: {}, status: 'running', model: '', lastText: ''};
     schedule();
   }
 
@@ -34,12 +34,13 @@
     L = S.laneBy[agent] = {key: agent, cols: 1, rows: {}, last: [], prev: [], newRow: true, rowN: 0};
     S.lanes.push(L);
     const isSub = /^sub\d+$/.test(agent), st = S.pendingStage;
-    const title = isSub ? 'sub-agente ' + agent.slice(3) : st ? st.node + (st.visit > 1 ? ' #' + st.visit : '') : agent;
-    const head = addNode(L, {kind: 'head', title, sub: isSub ? 'contexto próprio' : (S.models[st && st.node] || '').split('/').pop()}, true);
+    const isMain = agent === 'work' || agent === 'main';
+    const title = isSub ? 'sub-agente ' + agent.slice(3) : st ? st.node + (st.visit > 1 ? ' #' + st.visit : '') : isMain ? 'agente principal' : agent;
+    const head = addNode(L, {kind: 'head', title, sub: isSub ? 'contexto próprio' : (S.models[st && st.node] || (isMain && S.model) || '').split('/').pop()}, true);
     if (isSub) {
       const parent = S.pendingTask.shift();
       if (parent) S.edges.push({a: parent, b: head, cross: true, label: 'delega'});
-    } else {
+    } else if (st) {
       S.stageLast.forEach(p => S.edges.push({a: p, b: head, cross: true, label: S.lastRoute}));
       S.curStage = L; S.stageTouched = true;
     }
@@ -58,6 +59,23 @@
     if (!S) reset();
     const a = ev.agent || 'main';
     switch (ev.type) {
+      case 'session_start': S.model = ev.model || S.model; return;
+      case 'user': {                                    // a chat turn (the web app's own marker)
+        if (ev.model) S.model = ev.model;
+        S.status = 'running'; S.lastText = '';
+        addNode(lane('work'), {kind: 'user', title: 'você', sub: clip(ev.text, 25), tip: ev.text || 'você'}, true); break; }
+      case 'assistant': if (a === 'work' || a === 'main') S.lastText = ev.text || S.lastText; return;
+      case 'turn_end': {
+        S.status = 'done';
+        S.nodes.forEach(n => { if (n.status === 'run') n.status = 'stop'; });
+        const ok = ev.status === 'success', text = (ok && S.lastText) || ev.error || '';
+        addNode(lane('work'), {kind: 'final', title: ok ? 'resultado' : ev.status === 'interrupted' ? 'interrompido' : ev.status === 'incomplete' ? 'incompleto' : 'erro',
+                               sub: clip(text, 25), status: ok ? 'ok' : ev.status === 'interrupted' ? 'stop' : 'err', tip: text || ev.status}, true); break; }
+      case 'permission': S.questions['p:' + ev.qid] = addNode(S.laneBy[a] || S.lastLane || lane('work'),
+        {kind: 'ask', title: 'aprovação', sub: clip(ev.title, 25), status: 'run', tip: ev.title || 'aprovação'}, true); break;
+      case 'permission_result': { const n = S.questions['p:' + ev.qid]; if (!n) return;
+        const yes = String(ev.decision).startsWith('allow');
+        n.status = yes ? 'ok' : 'err'; n.sub = yes ? (ev.decision === 'allow_always' ? '→ permitido sempre' : '→ permitido') : '→ negado'; n.tip += ' ' + n.sub; break; }
       case 'graph': ev.nodes.forEach(n => { S.models[n.id] = n.model; }); break;
       case 'node_start': {
         S.pendingStage = {node: ev.node, visit: ev.visit}; S.stageTouched = false;
@@ -81,7 +99,7 @@
         if (ev.name === 'task') S.pendingTask.push(n);
         break; }
       case 'tool_end': { const n = S.byTool[ev.id]; if (n) { n.status = ev.ok ? 'ok' : 'err'; n.ms = ev.ms; if (!ev.ok) n.tip += '\n' + ev.preview; } break; }
-      case 'question': { const L = S.lastLane || lane(a);
+      case 'question': { if (ev.kind === 'approval' && S.questions['p:' + ev.qid]) return; const L = S.lastLane || lane(a);
         S.questions[ev.qid] = addNode(L, {kind: 'ask', title: ev.kind === 'approval' ? 'aprovação' : 'pergunta', sub: clip(ev.question, 25), status: 'run', tip: ev.question}, true); break; }
       case 'answer': { const n = S.questions[ev.qid]; if (n) { n.status = 'ok'; n.sub = clip('→ ' + (ev.answer ?? 'sem resposta'), 25); n.tip += '\n→ ' + ev.answer; } break; }
       case 'verdict': addNode(S.curStage || S.lastLane || lane(a), {kind: 'verdict', title: 'revisor: ' + (ev.verdict === 'approve' ? 'aprova' : 'rejeita'),

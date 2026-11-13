@@ -70,6 +70,24 @@ python -m hangar studio pptx deck.json deck.pptx                                
 - **Imagem**: padrão `google/gemini-3.1-flash-image` (cerca de US$ 0,07 por imagem); o gasto entra na conta da sessão.
 - Requisitos: Chrome ou Edge para captura/vídeo, ffmpeg para vídeo, chave do OpenRouter para imagem.
 
+## O app web (`hangar ui`)
+
+```bash
+python -m hangar ui
+```
+
+Abre em `http://127.0.0.1:3090` uma interface completa, com o mesmo desenho do Agent Hangar Desktop:
+
+- **Sessões** na barra lateral (buscar, fixar, renomear, arquivar), cada uma com a sua pasta, modelo, esforço e modo de
+  permissão. A conversa continua depois de fechar e reabrir.
+- **Conversa** com streaming, diff das edições, cartões de permissão e de pergunta, lista de tarefas e custo por rodada.
+- **Anexos e gravação**: anexe arquivos (botão, arrastar, colar imagem) ou grave a tela e o microfone pelo navegador;
+  a gravação vira um anexo `.webm`. Para o modelo entender vídeo e áudio é preciso o `ffmpeg` e um modelo de percepção.
+- **Painéis**: Terminal, Alterações (git), Arquivos, Navegador, Artifacts, Harness e Grafo ao vivo.
+
+O servidor escuta só em `127.0.0.1` e exige um token gerado a cada execução; ele lê arquivos apenas dentro da pasta de
+cada sessão. O Terminal roda comandos avulsos (não é um terminal interativo).
+
 ## Modo bridge: o harness como motor de outro programa
 
 `python -m hangar bridge` mantém uma conversa por processo e fala JSON em linhas pelo stdin/stdout. É como o
