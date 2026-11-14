@@ -308,3 +308,7 @@ TASKS.update(HARD)
 from tasks_studio import STUDIO  # noqa: E402
 
 TASKS.update(STUDIO)
+
+from tasks_data import DATA  # noqa: E402
+
+TASKS.update(DATA)

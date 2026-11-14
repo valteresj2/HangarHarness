@@ -106,18 +106,72 @@ medição anterior também não mostrou ganho. A memória ainda não se pagou ne
 | Modelo fraco se perdia explorando | lembrete da tarefa a cada 4 passos (no fim do contexto, sem quebrar o cache) |
 | Agente lia pastas de execuções vizinhas do benchmark | cada execução em pasta temporária própria; respostas roteirizadas fora dela |
 
-## Comparação com o Claude Code — pendente
+## Comparação com o Claude Code (14/11/2026)
 
-`claude -p` nesta máquina respondeu `Failed to authenticate: OAuth session expired and could not be refreshed`
-(inclusive com as variáveis de ambiente limpas), então **não há números do Claude Code**. Depois de refazer o login
-(`claude` → `/login`), rode:
+`claude -p` (Claude Code 2.1.307, configuração padrão, modo `acceptEdits`), mesmas tarefas, mesma pasta inicial e mesmo
+verificador. Custos a preço de API; o do Claude Code é o `total_cost_usd` que ele mesmo informa (numa assinatura não há
+cobrança por chamada).
 
-```bash
-python bench/run_bench.py --claude --tasks bugfix,feature,image,audio,video,mcp --tag claude
-```
+**Mesmo modelo dos dois lados** (`claude-haiku-5.5`), mediana de cinco execuções por tarefa:
 
-O runner já registra custo equivalente de API (`total_cost_usd`), tokens, cache, turnos e tempo, na mesma tabela.
-`ask` fica de fora porque o modo headless do Claude Code não pergunta ao usuário.
+| Tarefa | Hangar ok | Custo | Tempo | Tokens entrada | Claude Code ok | Custo | Tempo | Tokens entrada |
+|---|---|---|---|---|---|---|---|---|
+| bugfix | 5/5 | $0.0017 | 8.7s | 20,7k | 5/5 | $0.0062 | 15.6s | 155k |
+| feature | 5/5 | $0.0017 | 9.6s | 17,1k | 5/5 | $0.0095 | 24.6s | 167k |
+| kvstore | 5/5 | $0.0055 | 37.4s | 46,8k | 5/5 | $0.0353 | 181.8s | 1.103k |
+| **soma** | 15/15 | **$0.0088** | 55.7s | 84,5k | 15/15 | **$0.0510** | 222.0s | 1.425k |
+
+Com o mesmo modelo, o Hangar gastou 5,8× menos, enviou 16,9× menos tokens de entrada, 3,4× menos de saída, e levou 4× menos tempo.
+
+Custo fixo de sessão (`"Responda apenas: ok"`, Haiku 5.5): Claude Code 26.878 tokens de entrada (US$ 0,00246 com cache
+frio, US$ 0,00027 quente); Hangar 2.942 (US$ 0,00037 e US$ 0,00003).
+
+**Equipe automática contra o Fable 5.2**, média de duas execuções por tarefa:
+
+| Tarefa | Hangar `auto` | Claude Code (`claude-fable-5-2`) |
+|---|---|---|
+| bugfix | ✅✅ $0.0009 · 16s · 19,6k | ✅✅ $0.380 · 15s · 111k |
+| feature | ✅✅ $0.0017 · 16s · 30,7k | ✅✅ $0.389 · 21s · 77k |
+| kvstore | ✅✅ $0.0033 · 54s · 73,1k | ✅✅ $1.008 · 118s · 123k |
+| **soma** | **$0.0059** · 86s · 123k | **$1.78** · 154s · 311k |
+
+Aqui o que pesa é o preço do modelo (cerca de 300× no custo, 2,5× nos tokens de entrada): as tarefas não precisam de um modelo de fronteira.
+
+**Um erro nosso que distorceu a primeira medição.** O runner liberava a ferramenta `Bash`, mas no Windows o Claude Code
+executa comandos pela ferramenta `PowerShell`; e a pasta temporária ia com nome curto (`USUARI~1`), que ele recusa editar
+como caminho suspeito. Com o Fable, as tarefas saíam mesmo assim (6/6), mas a US$ 3,20 e 1,07 milhão de tokens; com o
+Haiku, 6 de 15 falhavam. Corrigido em `run_claude` (lista de ferramentas, caminho longo, ambiente limpo), e cada linha do
+resultado agora traz `denials`: uma execução com ações negadas mede a configuração, não o agente.
+
+## Análise de dados: uma tarefa aberta (14/11/2026)
+
+Pedido: a análise completa do `bank-full.csv` (UCI Bank Marketing, 45.211 linhas), com relatório em HTML e um modelo
+para escolher para quem ligar. Não há resposta única, então a nota vem de um gabarito de 13 itens recalculados da base
+(tamanho, taxa de adesão, tratamento da variável que vaza o resultado, gráficos, recomendações) e do verificador
+`hangar studio report check`, que conta o que falta no relatório. Mediana de 3 rodadas; todas entregaram os dois
+arquivos pedidos.
+
+| configuração | custo US$ | tokens de entrada | tempo | gabarito | tabelas | lacunas |
+|---|---|---|---|---|---|---|
+| Hangar, claude-haiku-5.5 (skill antiga) | 0,012 | 153 mil | 94 s | 12/13 | 3 | 4 |
+| Hangar, claude-haiku-5.5 (skill nova + trava) | 0,017 | 291 mil | 129 s | 12/13 | 32 | 0 |
+| Claude Code, claude-haiku-5.5 | 0,048 | 1,13 milhão | 239 s | 13/13 | 9 | 1 |
+| Hangar, equipe automática (skill antiga) | 0,005 | 83 mil | 74 s | 12/13 | 1 | 7 |
+| Hangar, equipe automática (skill nova + trava) | 0,006 | 167 mil | 112 s | 12/13 | 10 | 0 |
+| Hangar, equipe automática + crítico (claude-sonnet-5.5) | 0,194 | 2,0 milhões | 422 s | 12/13 | 24 | 0 |
+| Claude Code, claude-fable-5.2 | 3,55 (preço de API) | 893 mil | 487 s | 13/13 | 8 | 3 |
+
+O que o gabarito não mede: o Claude Code com o modelo de fronteira percebeu que a base está em ordem cronológica,
+validou o modelo no tempo e mostrou que o "melhor mês" é efeito do período. Sem crítico, o Hangar usa divisão aleatória
+e reporta um número otimista. Com `--critic`, o crítico apontou esse defeito na primeira revisão das três rodadas, além
+de erros de cálculo nas tabelas de associação; os três relatórios finais passaram a trazer a validação temporal (AUC de
+0,74 no tempo contra 0,77 na divisão aleatória, a mesma faixa do modelo de fronteira). Do custo de US$ 0,19, cerca de
+US$ 0,14 são as duas chamadas do crítico.
+
+Limites: três rodadas por configuração, com custo variando bastante entre elas (o Claude Code com Haiku foi de US$ 0,044
+a US$ 0,197); a skill nova foi escrita depois de ver esta tarefa, o que favorece o "depois" nesta base; a qualidade final
+dos relatórios com crítico ainda não foi comparada por leitura lado a lado com a do modelo de fronteira; o crítico pediu
+revisão nas duas rodadas de todas as execuções, ou seja, não chegou a aprovar nenhuma entrega.
 
 ## Limites deste benchmark
 

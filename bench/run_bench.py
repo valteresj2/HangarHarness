@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -84,18 +85,25 @@ def run_claude(task: str, base: Path, model: str) -> dict:
         return {**row, "status": "skipped", "ok": None, "detail": "headless `claude -p` cannot ask the user"}
     prompt = spec["prompt"]
     cmd = ["claude", "-p", prompt, "--output-format", "json", "--permission-mode", "acceptEdits",
-           "--allowedTools", "Bash,Read,Edit,Write,Glob,Grep,mcp__vault"]
+           "--allowedTools", "Bash,PowerShell,Read,Edit,Write,Glob,Grep,mcp__vault"]
     if model:
         cmd += ["--model", model]
     if spec.get("mcp"):
         cmd += ["--mcp-config", str(d / ".mcp.json")]
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, cwd=str(d), capture_output=True, text=True, timeout=900, encoding="utf-8", errors="replace",
-                           stdin=subprocess.DEVNULL, shell=False)
+        # a clean environment: started from inside another Claude session, the child would inherit that session's
+        # host settings (base URL, auth refresh) and fail to authenticate with the CLI's own login
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ANTHROPIC"))}
+        p = subprocess.run(cmd, cwd=str(d), capture_output=True, text=True, timeout=1800, encoding="utf-8", errors="replace",
+                           stdin=subprocess.DEVNULL, shell=False, env=env)
         res = json.loads(p.stdout.strip().splitlines()[-1])
     except Exception as e:
         return {**row, "status": "crash", "ok": False, "detail": f"{type(e).__name__}: {e}"[:200], "duration_s": round(time.time() - t0, 1)}
+    if res.get("is_error") and not (res.get("usage") or {}).get("output_tokens"):
+        # the model never worked (not logged in, quota, bad flag): that is "did not run", not "did not solve"
+        return {**row, "status": "error", "ok": None, "detail": str(res.get("result") or "claude -p failed before any work")[:200],
+                "duration_s": round(time.time() - t0, 1)}
     try:
         ok, detail = TASKS[task][1](d)
     except Exception as e:
@@ -106,7 +114,10 @@ def run_claude(task: str, base: Path, model: str) -> dict:
     return {**row, "status": "error" if res.get("is_error") else "done", "ok": bool(ok), "detail": detail,
             "cost": float(res.get("total_cost_usd") or 0), "prompt": prompt_t, "cached": cached,
             "completion": int(u.get("output_tokens") or 0), "llm_calls": res.get("num_turns"), "tool_calls": None,
-            "duration_s": round((res.get("duration_ms") or 0) / 1000, 1), "models": list((res.get("modelUsage") or {}).keys())}
+            "duration_s": round((res.get("duration_ms") or 0) / 1000, 1), "models": list((res.get("modelUsage") or {}).keys()),
+            # what the harness refused to do: a run full of denials measured the setup, not the agent
+            "workdir": str(d), "denials": [f"{d.get('tool_name')} {str((d.get('tool_input') or {}).get('file_path') or '')[:160]}".strip()
+                        for d in (res.get("permission_denials") or [])]}
 
 
 def table(rows: list[dict]) -> str:
@@ -140,7 +151,7 @@ def main() -> int:
     global KEEP_LESSONS, KEEP_MEMORY
     KEEP_LESSONS, KEEP_MEMORY = a.lessons, a.memory
     stamp = time.strftime("%Y%m%d-%H%M%S") + (f"-{a.tag}" if a.tag else "")
-    base = Path(tempfile.gettempdir()) / "hangar_bench" / stamp
+    base = Path(os.path.realpath(tempfile.gettempdir())) / "hangar_bench" / stamp
     base.mkdir(parents=True, exist_ok=True)
     tasks = [t for t in a.tasks.split(",") if t in TASKS]
     jobs = []

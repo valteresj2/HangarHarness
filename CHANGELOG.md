@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.7.0
+
+- **Camada de qualidade** (`--critic`, `hangar/critic.py`): antes de aceitar o "terminei", o modelo mais forte da lista lê
+  a entrega e aprova ou devolve até três defeitos, cada um com a evidência, o que fazer e como saber que ficou certo. É
+  uma chamada só, sem ferramentas, sobre um resumo dos arquivos entregues (não sobre a conversa), feita depois das
+  checagens gratuitas e no máximo duas vezes por agente. `--critic <modelo>` escolhe o modelo, `--critic-scope all`
+  estende a sub-agentes e ao planejador; o gasto aparece na linha "crítico" da conta por papel. Desligada por padrão: nas
+  nossas medições ela leva uma análise de dados de US$ 0,006 para cerca de US$ 0,20. Uma skill pode trazer critérios
+  próprios num `RUBRIC.md`.
+- **Trava de skill**: uma skill pode declarar no cabeçalho o comando que prova que o trabalho terminou (`gate`,
+  `gate_fail`, `gate_hint`). Se a sessão carregou a skill e esse comando ainda não passou, o harness recusa o "terminei"
+  e devolve o que falta (no máximo duas vezes). Vale a saída do comando, não só o código de retorno.
+- **Relatórios de análise** (`hangar studio report`): `build` transforma um JSON (seções, tabelas, gráficos de barra e de
+  linha, imagens embutidas) num HTML único, com números no formato do leitor; `check` lista o que falta num relatório —
+  seções, tabelas, gráficos, colunas da base nunca tratadas, linha de base, validação, importância das variáveis, ganho,
+  limites e recomendações.
+- **Skill `data-analysis` reescrita**: profundidade como padrão, roteiro de oito seções, regras de modelagem (só o que
+  se conhece na hora da decisão, linha de base, validação, ganho por decil) e a trava apontando para `report check`.
+- **Benchmark de análise de dados** (`bench/tasks_data.py`): duas bases públicas da UCI com gabarito de fatos recalculados
+  da base. O arquivo de dados não acompanha o repositório.
+- **Correções no benchmark contra o Claude Code**: o ambiente do processo filho é limpo, a ferramenta PowerShell é
+  permitida no Windows, a pasta temporária usa o caminho longo, as recusas de permissão ficam registradas e uma execução
+  que não chegou a rodar deixa de contar como falha. Os números anteriores a essas correções foram descartados.
+
 ## v0.6.0
 
 - **Backlog do projeto** (`hangar backlog`, `<projeto>/.hangar/backlog.json`): para objetivos maiores que uma sessão. Um

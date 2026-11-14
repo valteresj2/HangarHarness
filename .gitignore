@@ -21,3 +21,6 @@ graphify-out/
 
 # peças geradas pelo teste do estúdio (vídeos e imagens grandes) — ficam só na máquina
 examples/
+
+# bases de dados baixadas para o benchmark (ver bench/tasks_data.py)
+bench/data/

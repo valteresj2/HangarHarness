@@ -124,6 +124,29 @@ resposta e coluna de gasto no botão "Modelos"):
 Os papéis são `worker`, `light`, `deep`, `sub` (sub-agente sem nível), `planner`, `verifier`, `escalation`, `helper`,
 `perception` e `studio` (geração de imagem). A soma dos papéis é o custo total da sessão.
 
+## Camada de qualidade: o modelo forte só julga
+
+```bash
+hangar run "analise vendas.csv e entregue um relatório" -m auto --critic
+```
+
+O modelo barato faz o trabalho; o mais forte da lista é pago só para julgar. Antes de aceitar o "terminei", o harness
+passa a entrega por três camadas, da mais barata para a mais cara:
+
+1. **Checagens gratuitas**: o último comando saiu com código 0, os ganchos do projeto passaram.
+2. **Trava da skill**: a skill carregada declara o comando que prova que o trabalho terminou (na análise de dados,
+   `hangar studio report check`); enquanto ele não passar, o agente volta ao trabalho com a lista do que falta.
+3. **Crítico** (`--critic`): uma chamada, sem ferramentas, sobre um resumo dos arquivos entregues. Devolve até três
+   defeitos com evidência, o que fazer e como saber que ficou certo; no máximo duas rodadas por agente.
+
+Medido numa análise completa de uma base de 45 mil linhas: sem crítico, US$ 0,006; com crítico, cerca de US$ 0,20, e o
+crítico apontou em todas as rodadas que a base está em ordem cronológica e que a validação aleatória inflava o
+resultado. A mesma tarefa no Claude Code com um modelo de fronteira saiu por US$ 3,55 a preço de API. Detalhes e limites
+em [docs/BENCHMARK.md](docs/BENCHMARK.md). A camada vem desligada: ela multiplica o custo e só compensa quando errar é caro.
+
+`--critic <modelo>` escolhe o modelo; `--critic-scope all` aplica também a sub-agentes e ao planejador; `critic_model`,
+`critic_rounds` e `critic_scope` ficam no `hangar.toml`.
+
 ## Backlog: trabalho maior que uma sessão
 
 Uma sessão resolve uma tarefa e esquece. Para um objetivo que não cabe numa sessão — um sistema inteiro, uma migração —

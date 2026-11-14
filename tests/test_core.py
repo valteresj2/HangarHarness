@@ -152,6 +152,34 @@ class RobustnessTests(unittest.TestCase):
         self.assertIsNone(manifest[new_key])                                   # did not exist before
         self.assertEqual((self.s.dir / "backup" / manifest[old_key]).read_text(), "original")   # first version, kept once
 
+    def test_critic_sends_the_agent_back_then_accepts(self):
+        from hangar import critic
+        from hangar.agent import Agent
+        from hangar.llm import Reply
+        (self.tmp / "relatorio.md").write_text("AUC 0,93 com todas as colunas", encoding="utf-8")
+        self.s.cfg.update(critic_model="forte/critico", critic_rounds=2, verify_nudge=False)
+        seen, worker = [], iter(["pronto", "corrigido", "final"])
+        verdicts = iter(['{"verdict": "revise", "defects": [{"problem": "validação aleatória", "evidence": "AUC 0,93", '
+                         '"fix": "valide no tempo", "done_when": "há AUC temporal"}]}', 'tudo certo {"verdict": "approve", "defects": []}'])
+
+        def chat(model, messages, **k):
+            seen.append((k.get("agent"), model, messages[-1]["content"]))
+            text = next(verdicts) if k.get("agent") == "critic" else next(worker)
+            return Reply(content=text, finish="stop", usage={"prompt": 10, "completion": 5, "cost": 0.01}, model=model)
+        self.s.llm.chat = chat
+        a = Agent(self.s, model="openai/gpt-6-luna", name="work")
+        self.assertEqual(a.run("analise a base"), "corrigido")                 # one push back, then the second review approves
+        critics = [x for x in seen if x[0] == "critic"]
+        self.assertEqual([m for _, m, _ in critics], ["forte/critico"] * 2)
+        self.assertIn("AUC 0,93 com todas as colunas", critics[0][2])          # the critic reads the delivered file, not the transcript
+        self.assertIn("validação aleatória", critics[1][2])                    # and is reminded of what it asked for
+        back = [c for ag, _, c in seen if ag != "critic" and isinstance(c, str) and "quality review" in c]
+        self.assertTrue(back and "valide no tempo" in back[0] and "Done when" in back[0])
+        self.assertEqual(self.s.by_role["critic"]["calls"], 2)                 # billed on its own line
+        self.assertEqual(critic.parse("nonsense"), ("approve", []))            # an unreadable review never blocks the work
+        self.s.cfg["critic_model"] = ""
+        self.assertFalse(critic.applies(self.s, a))
+
     def test_background_process(self):
         out = self.b["shell"].fn(self.ctx, {"command": "echo started; sleep 30", "background": True})
         self.assertIn("bg1", out)
@@ -334,6 +362,38 @@ class StudioTests(unittest.TestCase):
             pptx.build({"slides": [{"layout": "image", "image": "nao_existe.png"}]}, self.tmp / "x.pptx", base=self.tmp)
         with self.assertRaises(ValueError):
             pptx.build({"slides": []}, self.tmp / "x.pptx", base=self.tmp)
+
+    def test_skill_gate_blocks_finish_until_its_check_passes(self):
+        from types import SimpleNamespace
+        from hangar import skills
+        found = skills.discover(self.tmp)
+        self.assertIn("report check", found["data-analysis"]["gate"])
+        s = SimpleNamespace(skills=found, skill_gates={})
+        self.assertEqual(skills.gate_pending(s), "")                         # a skill nobody loaded owes nothing
+        s.skill_gates["data-analysis"] = False
+        self.assertIn("data-analysis", skills.gate_pending(s))
+        skills.gate_seen(s, "python analysis.py", 0, "fine")                 # an unrelated command does not settle it
+        self.assertTrue(skills.gate_pending(s))
+        skills.gate_seen(s, "python -m hangar studio report check r.html | tail", 0, "GAPS (fix every one...)")
+        self.assertTrue(skills.gate_pending(s))                              # exit 0 through a pipe still shows the gaps
+        skills.gate_seen(s, "python -m hangar studio report check r.html", 0, "ok: the report meets the depth minimum")
+        self.assertEqual(skills.gate_pending(s), "")
+
+    def test_report_build_and_check(self):
+        from hangar import report
+        spec = {"title": "T", "sections": [{"title": "Qualidade", "blocks": [
+            {"type": "table", "columns": ["a", "n"], "rows": [["x", 1234], ["y", 2.5]]},
+            {"type": "bar", "labels": ["x", "y"], "values": [3, -1], "unit": "%"},
+            {"type": "line", "labels": ["1", "2"], "series": [{"name": "s", "values": [1, 2]}]}]}]}
+        r = report.build(spec, self.tmp / "r.html", self.tmp)
+        self.assertEqual((r["sections"], r["tables"], r["charts"]), (1, 1, 2))
+        page = (self.tmp / "r.html").read_text(encoding="utf-8")
+        self.assertIn("1.234", page)                                         # numbers in the reader's locale
+        have, gaps = report.check(page, ["a", "n", "esquecida"], "n")
+        self.assertEqual(have["tables"], 1)
+        self.assertTrue(any("esquecida" in g for g in gaps) and any("baseline" in g for g in gaps))
+        with self.assertRaises(ValueError):
+            report.build({"sections": [{"title": "x", "blocks": [{"type": "pie"}]}]}, self.tmp / "x.html", self.tmp)
 
     def test_builtin_skills_ship_with_the_harness(self):
         from hangar import skills
