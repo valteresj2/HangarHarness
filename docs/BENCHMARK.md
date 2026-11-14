@@ -173,6 +173,37 @@ a US$ 0,197); a skill nova foi escrita depois de ver esta tarefa, o que favorece
 dos relatórios com crítico ainda não foi comparada por leitura lado a lado com a do modelo de fronteira; o crítico pediu
 revisão nas duas rodadas de todas as execuções, ou seja, não chegou a aprovar nenhuma entrega.
 
+### Crítico com checagens executadas, e uma segunda base (v0.7.1)
+
+Na v0.7.1 o harness passou a executar as checagens que o crítico propõe e a recusar as que só leem o relatório. Para
+separar o efeito da skill (escrita olhando a primeira base) medimos também uma segunda: `online_shoppers_intention.csv`
+(UCI, 12.330 sessões de uma loja online), com gabarito de 11 itens. A armadilha dela é de enquadramento: várias colunas
+(páginas vistas, tempo na sessão, valor da página) só existem depois que a visita acontece, e um modelo honesto para
+decidir na chegada do visitante não pode usá-las. Equipe automática com crítico, mediana de 3 rodadas:
+
+| | crítico da v0.7.0 | com checagens | checagens endurecidas (v0.7.1) |
+|---|---|---|---|
+| banco: custo US$ | 0,194 | 0,164 | 0,193 |
+| banco: tempo | 422 s | 283 s | 419 s |
+| banco: validação no tempo | 3 de 3 | 3 de 3 | 3 de 3 |
+| loja: custo US$ | 0,212 | 0,182 | 0,181 |
+| loja: tempo | 425 s | 325 s | 269 s |
+| loja: gabarito | 10/11 | 11/11 | 10/11 |
+| loja: modelo só com dados da chegada | 0 de 3 | 2 de 3 | 0 de 3 |
+
+Referências na segunda base: equipe automática sem crítico, US$ 0,007 e 104 s (modelo só com dados da chegada em 1 de
+3); Claude Code com claude-fable-5.2, US$ 2,89 a preço de API e 400 s (2 de 2 rodadas).
+
+O que mudou de fato foi o tipo de checagem. Na versão intermediária a maioria procurava palavras no relatório; na
+v0.7.1 todas comparam números gravados pelo script de análise (o AUC do resumo igual ao AUC temporal, o intervalo de
+confiança contendo a estimativa, as contagens somando o total de linhas), e nas seis rodadas esses números batem com os
+do relatório. Na base do banco, o número principal passou a ser o AUC temporal, não o da divisão aleatória.
+
+O que não mudou: o crítico não aponta o erro de enquadramento da segunda base, mesmo com o critério escrito nas
+instruções dele; os 2 de 3 da versão intermediária não se repetiram e devem ser ruído. Ele nunca aprovou uma entrega em
+24 revisões. Com três rodadas por configuração, as diferenças de custo e de tempo entre as três versões também não
+permitem conclusão.
+
 ## Limites deste benchmark
 
 - Tarefas pequenas (segundos a minutos), uma execução por célula na tabela principal: boa para comparar ordens de grandeza de custo e achar bugs do harness, fraca para diferenças finas de qualidade. Modelos fracos variam bastante entre rodadas.

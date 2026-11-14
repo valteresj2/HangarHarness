@@ -137,12 +137,15 @@ passa a entrega por três camadas, da mais barata para a mais cara:
 2. **Trava da skill**: a skill carregada declara o comando que prova que o trabalho terminou (na análise de dados,
    `hangar studio report check`); enquanto ele não passar, o agente volta ao trabalho com a lista do que falta.
 3. **Crítico** (`--critic`): uma chamada, sem ferramentas, sobre um resumo dos arquivos entregues. Devolve até três
-   defeitos com evidência, o que fazer e como saber que ficou certo; no máximo duas rodadas por agente.
+   defeitos com evidência, o que fazer e como saber que ficou certo; no máximo duas rodadas por agente. Quando o
+   defeito vem com um comando de checagem, o harness o executa antes e depois da correção: o que já passa é descartado,
+   o que ainda falha volta ao agente sem pagar outra revisão. Checagens que só leem o texto do relatório são recusadas.
 
 Medido numa análise completa de uma base de 45 mil linhas: sem crítico, US$ 0,006; com crítico, cerca de US$ 0,20, e o
 crítico apontou em todas as rodadas que a base está em ordem cronológica e que a validação aleatória inflava o
 resultado. A mesma tarefa no Claude Code com um modelo de fronteira saiu por US$ 3,55 a preço de API. Detalhes e limites
-em [docs/BENCHMARK.md](docs/BENCHMARK.md). A camada vem desligada: ela multiplica o custo e só compensa quando errar é caro.
+em [docs/BENCHMARK.md](docs/BENCHMARK.md), incluindo uma segunda base em que o crítico não pegou o erro principal. A
+camada vem desligada: ela multiplica o custo e só compensa quando errar é caro.
 
 `--critic <modelo>` escolhe o modelo; `--critic-scope all` aplica também a sub-agentes e ao planejador; `critic_model`,
 `critic_rounds` e `critic_scope` ficam no `hangar.toml`.

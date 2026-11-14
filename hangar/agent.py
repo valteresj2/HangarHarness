@@ -41,6 +41,8 @@ class Agent:
         self.level = ""                            # a routed sub-agent: "light" or "deep"
         self.critic_rounds = 0                     # quality reviews this agent already went through (see critic.py)
         self.critic_defects: list = []
+        self.critic_pushes = 0                     # times the critic's own checks sent this agent back since the last review
+        self.critic_snapshot = None                # the reviewed delivery, kept until the revision is known not to be worse
         self.goal = ""
         self.max_out = session.cfg["max_output_tokens"]
         self.seen: dict[str, int] = {}
@@ -334,12 +336,14 @@ class Agent:
                 if push:                                 # project policy decides when "done" is allowed
                     self.messages.append({"role": "user", "content": push})
                     continue
-                if critic.applies(s, self) and not skills_mod.gate_pending(s):
-                    back = critic.review(s, self, text)  # the strongest model judges the delivery; free checks came first
+                if critic.enabled(s, self) and not skills_mod.gate_pending(s):
+                    # the critic's checks are run by the harness, for free; only when they pass is another paid review due
+                    back = critic.pending_checks(s, self) or (critic.review(s, self, text) if critic.applies(s, self) else "")
                     if back:
                         skill_nudges = 0
                         self.messages.append({"role": "user", "content": back})
                         continue
+                text += critic.settle(s, self)           # a revision that broke the skill check is undone
                 self.save()
                 return text
 

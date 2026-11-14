@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.1
+
+- **O harness executa as checagens do crítico**: cada defeito pode vir com um comando de leitura que falha agora e passa
+  depois da correção. O harness roda o comando antes de devolver o defeito (se já passa, o defeito é descartado) e de
+  novo quando o agente diz que terminou; o que ainda falha volta ao agente sem pagar outra revisão, até duas vezes.
+- **Checagem tem de testar o trabalho, não o texto**: comandos que leem o relatório (`.html`, `.md`, `.txt`) são
+  recusados, porque procurar uma palavra se resolve reescrevendo a frase. O crítico passa a pedir que o script da
+  análise grave os números num `evidence.json` e a comparar valores (por exemplo, o AUC do resumo igual ao AUC da
+  validação no tempo). `hangar studio` continua aceito, porque inspeciona a página como um navegador.
+- **Regra de parada**: a partir da segunda revisão só contam defeitos com checagem que falha; sem nenhum, a entrega é
+  aprovada.
+- **Revisão que piora é desfeita**: os arquivos entregues são guardados antes da correção pedida pelo crítico e
+  restaurados se, depois dela, a trava de uma skill deixar de passar.
+- As checagens só rodam com `permission = "auto"` e nunca comandos que escrevem, apagam, instalam ou baixam.
+- **O que isso não resolveu**, medido em duas bases com três rodadas cada: o custo e o tempo ficaram no nível da v0.7.0,
+  o crítico continuou sem aprovar nenhuma entrega e, na segunda base, não apontou o uso de variáveis que só existem
+  depois da decisão. Detalhes em `docs/BENCHMARK.md`.
+
 ## v0.7.0
 
 - **Camada de qualidade** (`--critic`, `hangar/critic.py`): antes de aceitar o "terminei", o modelo mais forte da lista lê

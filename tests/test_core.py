@@ -180,6 +180,63 @@ class RobustnessTests(unittest.TestCase):
         self.s.cfg["critic_model"] = ""
         self.assertFalse(critic.applies(self.s, a))
 
+    def test_critic_checks_are_run_by_the_harness(self):
+        from hangar import critic
+        from hangar.agent import Agent
+        from hangar.llm import Reply
+        (self.tmp / "resumo.json").write_text('{"auc": 0.93}', encoding="utf-8")
+        self.s.cfg.update(critic_model="forte/critico", critic_rounds=2, verify_nudge=False, permission="auto")
+        real = "python -c \"import json; assert json.load(open('resumo.json'))['auc'] < 0.9\""
+        first = {"verdict": "revise", "defects": [
+            {"problem": "AUC inflada", "fix": "valide no tempo", "check": real},
+            {"problem": "ja passa", "check": "python -c \"print(1)\""},                     # proves nothing: dropped
+            {"problem": "perigoso", "check": "rm -rf ."}]}                                  # not a check: never run
+        second = {"verdict": "revise", "defects": [{"problem": "poderia ter mais contexto", "check": ""}]}
+        reviews, seen, calls = iter([json.dumps(first), json.dumps(second)]), [], {"worker": 0}
+
+        def chat(model, messages, **k):
+            seen.append((k.get("agent"), messages[-1]["content"]))
+            if k.get("agent") == "critic":
+                return Reply(content=next(reviews), finish="stop", usage={"prompt": 10, "completion": 5, "cost": 0.01}, model=model)
+            calls["worker"] += 1
+            if calls["worker"] == 3:                                                        # only the third answer really fixes it
+                (self.tmp / "resumo.json").write_text('{"auc": 0.74}', encoding="utf-8")
+            return Reply(content=f"resposta {calls['worker']}", finish="stop", usage={"prompt": 10, "completion": 5, "cost": 0.0}, model=model)
+        self.s.llm.chat = chat
+        a = Agent(self.s, model="openai/gpt-6-luna", name="work")
+        self.assertEqual(a.run("analise"), "resposta 3")
+        to_worker = [c for ag, c in seen if ag != "critic" and isinstance(c, str)]
+        review_msg = next(c for c in to_worker if "quality review by" in c)
+        self.assertIn("The harness will run this", review_msg)
+        self.assertEqual(review_msg.count("The harness will run this"), 1)                  # only the check that fails now is kept
+        self.assertTrue(any("these still fail" in c for c in to_worker))                    # "done" without the fix: sent back for free
+        self.assertEqual(sum(ag == "critic" for ag, _ in seen), 2)                          # the push back cost no review
+        self.assertIn("its check now passes", [c for ag, c in seen if ag == "critic"][1])
+        self.assertEqual(a.critic_defects, [])                                              # round 2 had nothing verifiable left: approved
+        self.assertFalse(critic.runnable(self.s, "python x.py > out.txt") or critic.runnable(self.s, "pip install x"))
+        grep = "python -c \"assert 'temporal' in open('relatorio.html', encoding='utf-8').read()\""
+        self.assertFalse(critic.runnable(self.s, grep))                                     # rewording the report would satisfy it
+        self.assertTrue(critic.runnable(self.s, "python -m hangar studio check relatorio.html"))
+        self.assertIn("evidence.json", critic.feedback([{"problem": "p", "check": "python -c \"open('evidence.json')\""}], "m", 1, 2).splitlines()[-1])
+        self.s.cfg["permission"] = "ask"
+        self.assertFalse(critic.runnable(self.s, real))                                     # never runs where the user approves commands
+
+    def test_critic_revision_that_breaks_the_gate_is_undone(self):
+        from types import SimpleNamespace
+        from hangar import critic
+        (self.tmp / "relatorio.md").write_text("versao que passou", encoding="utf-8")
+        agent = SimpleNamespace(name="work", critic_snapshot=None)
+        critic.snapshot(self.s, agent)
+        (self.tmp / "relatorio.md").write_text("revisao quebrada", encoding="utf-8")
+        self.s.skills["x"] = {"gate": "checar", "path": self.tmp / "SKILL.md"}
+        self.s.skill_gates["x"] = True
+        self.assertEqual(critic.settle(self.s, agent), "")                                  # the gate still passes: nothing to undo
+        self.assertEqual((self.tmp / "relatorio.md").read_text(encoding="utf-8"), "revisao quebrada")
+        self.s.skill_gates["x"] = False
+        self.assertIn("restored", critic.settle(self.s, agent))
+        self.assertEqual((self.tmp / "relatorio.md").read_text(encoding="utf-8"), "versao que passou")
+        self.assertTrue(self.s.skill_gates["x"])
+
     def test_background_process(self):
         out = self.b["shell"].fn(self.ctx, {"command": "echo started; sleep 30", "background": True})
         self.assertIn("bg1", out)
