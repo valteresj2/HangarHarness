@@ -23,4 +23,4 @@ hangar = "hangar.cli:main"
 packages = ["hangar"]
 
 [tool.setuptools.package-data]
-hangar = ["ui.html", "ui.css", "ui.js", "flow.js", "roster.json", "skills/*/SKILL.md"]
+hangar = ["ui.html", "ui.css", "ui.js", "flow.js", "roster.json", "skills/*/*.md"]
