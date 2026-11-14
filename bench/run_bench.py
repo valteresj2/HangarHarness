@@ -21,6 +21,7 @@ from tasks import TASKS  # noqa: E402
 
 EXTRA: list[str] = []
 KEEP_LESSONS = False
+KEEP_MEMORY = False
 
 
 def slug(s: str) -> str:
@@ -45,6 +46,8 @@ def run_hangar(model: str, task: str, base: Path, workflow: str, planner: str, l
            "--json", "--no-interactive", "--max-cost", "1.5"]
     if not KEEP_LESSONS:
         cmd.append("--no-lessons")                       # benchmark runs must not teach or be taught by each other
+    if not KEEP_MEMORY:
+        cmd.append("--no-memory")                        # nor carry project facts: every run starts cold
     if planner:
         cmd += ["--planner", planner]
     cmd += EXTRA
@@ -129,12 +132,13 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--tag", default="")
     ap.add_argument("--lessons", action="store_true", help="let runs read/write the lesson library (off by default)")
+    ap.add_argument("--memory", action="store_true", help="let runs read/write project memory (off by default)")
     ap.add_argument("--label", default="", help="suffix shown in the results table")
     ap.add_argument("--extra", default="", help="extra flags passed to `hangar run`, e.g. \"--escalate anthropic/claude-sonnet-5.5\"")
     a = ap.parse_args()
     EXTRA[:] = a.extra.split()
-    global KEEP_LESSONS
-    KEEP_LESSONS = a.lessons
+    global KEEP_LESSONS, KEEP_MEMORY
+    KEEP_LESSONS, KEEP_MEMORY = a.lessons, a.memory
     stamp = time.strftime("%Y%m%d-%H%M%S") + (f"-{a.tag}" if a.tag else "")
     base = Path(tempfile.gettempdir()) / "hangar_bench" / stamp
     base.mkdir(parents=True, exist_ok=True)

@@ -47,13 +47,7 @@ class Session:
             self.bus.emit("team", team=router.describe(self.team))
         self.llm = LLM(cfg, self.catalog, self.bus, session_id=self.id)
         self.machine = machine.probe()
-        bash = self.machine.get("bash") if cfg["shell"] in ("auto", "bash") else ""
-        if os.name != "nt":
-            self.shell_name, self.shell_argv = "bash", [bash or "/bin/sh", "-c"]
-        elif bash:
-            self.shell_name, self.shell_argv = "bash (Git Bash on Windows; POSIX syntax, forward slashes)", [bash, "-c"]
-        else:
-            self.shell_name, self.shell_argv = "Windows PowerShell 5.1 (no &&; use ;)", ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+        self.shell_name, self.shell_argv = machine.shell(cfg, self.machine)
         self.skills = skills_mod.discover(self.cwd, cfg.get("skills_dirs"))
         self.mcp = MCPManager(self.cwd, self.bus)
         self.tool_mode: dict[str, str] = {}
@@ -87,6 +81,20 @@ class Session:
         self._save_meta()
         from .hooks import Hooks
         self.hooks = Hooks(self)
+        # project memory: what was known when the session started (the prompt must not change mid-session)
+        self.ok_commands: dict[str, float] = {}    # shell commands that exited 0 here: the proof a command fact needs
+        self.tool_counts: dict[str, int] = {}
+        self.files_seen: set[str] = set()
+        self.memory_saved: list[str] = []
+        self.memory_facts: list[dict] = []
+        self.memory_block = ""
+        if self.cfg.get("memory", True):
+            from . import memory
+            try:
+                self.memory_facts = memory.load(self.cwd)
+                self.memory_block = memory.block(self.cwd)
+            except OSError:
+                pass
 
     def _restore(self) -> None:
         """Resuming an existing session id: keep its accumulated totals, notes and undo manifest."""

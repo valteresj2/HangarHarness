@@ -14,7 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import media, project, skills as skills_mod
+from . import media, memory, project, skills as skills_mod
 from .config import PKG_ROOT
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", ".hangar", "dist", "build", ".mypy_cache", ".next", "target"}
@@ -95,6 +95,10 @@ def _guard_write(ctx: Ctx, path: Path) -> None:
 # ------------------------------------------------------------------ file tools
 def t_read(ctx: Ctx, a: dict) -> str:
     path = _resolve(ctx, a["path"])
+    try:
+        ctx.session.files_seen.add(str(path.relative_to(ctx.session.cwd)).replace("\\", "/"))
+    except ValueError:
+        pass
     if not path.is_file():
         near = [p.name for p in path.parent.glob("*")][:30] if path.parent.is_dir() else []
         raise ToolError(f"file not found: {a['path']}." + (f" Files in that directory: {', '.join(near)}" if near else ""))
@@ -267,6 +271,13 @@ def t_note(ctx: Ctx, a: dict) -> str:
     return "Noted."
 
 
+def t_remember(ctx: Ctx, a: dict) -> str:
+    ok, msg = memory.save(ctx.session, a, "agent")
+    if not ok:
+        raise ToolError(msg)
+    return msg
+
+
 def t_shell(ctx: Ctx, a: dict) -> str:
     s, cmd = ctx.session, a["command"]
     if s.cfg["permission"] == "readonly":
@@ -308,6 +319,8 @@ def t_shell(ctx: Ctx, a: dict) -> str:
         tail = f"[exit {p.returncode}]" if not s.abort.is_set() else "[interrupted by the user]"
         if not (p.returncode != 0 and s.last_exit == 0 and not s.edits_since_run and is_probe(cmd)):
             s.last_exit = p.returncode                   # a failed look-around after a passing check leaves the check standing
+        if not s.abort.is_set():
+            memory.observe(s, cmd, p.returncode)
     except subprocess.TimeoutExpired:
         s.last_exit = -1
         kill_tree(p)
@@ -460,6 +473,11 @@ def builtin() -> dict[str, Tool]:
              S({"command": STR, "timeout": INT, "background": BOOL}, ["command"]), t_shell),
         Tool("process", "Manage background processes: action = output | kill | list.", S({"action": STR, "id": STR}, ["action"]), t_process),
         Tool("note", "Save a durable fact or decision; notes survive context compaction and resume.", S({"text": STR}, ["text"]), t_note),
+        Tool("remember", "Save a durable fact about THIS PROJECT for future sessions (how to test/build/run it, where things live, "
+             "a convention, a trap). kind=command needs `command`, exactly as it just ran with exit 0; other kinds need `paths` "
+             "that show the fact. Not for task details.",
+             S({"name": STR, "kind": {"type": "string", "enum": list(memory.KINDS)}, "fact": STR, "command": STR,
+                "paths": {"type": "array", "items": STR}, "detail": STR}, ["name", "kind", "fact"]), t_remember),
         Tool("web_fetch", "Fetch a URL and return its text.", S({"url": STR}, ["url"]), t_web_fetch, True),
         Tool("web_search", "Search the web; returns titles, URLs and snippets.", S({"query": STR}, ["query"]), t_web_search, True),
         Tool("perceive", "Look at / listen to an image, audio, video or PDF file and answer a question about it.",
@@ -494,7 +512,9 @@ def select(session, toolset: str, tier: str, role: str) -> list[Tool]:
     elif toolset == "verify":
         names = [n for n in names if n in READONLY_SET or n in ("shell", "process")]
     if role != "main":
-        names = [n for n in names if n not in ("task", "ask_user", "plan", "note")]
+        names = [n for n in names if n not in ("task", "ask_user", "plan", "note", "remember")]
+    if not session.cfg.get("memory", True) or session.cfg["permission"] == "readonly":
+        names = [n for n in names if n != "remember"]
     if tier == "weak":
         names = [n for n in names if n not in ("task", "note")]   # delegation is below the capability floor; fewer tools = fewer mistakes
     if session.interactive == "none" and session.answers is None:

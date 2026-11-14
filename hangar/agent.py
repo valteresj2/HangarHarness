@@ -174,6 +174,7 @@ class Agent:
                 except Exception as e:  # tool bugs must never kill the loop
                     ok, out = False, f"Error: {type(e).__name__}: {e}"
         s.totals["tool_calls"] += 1
+        s.tool_counts[name] = s.tool_counts.get(name, 0) + 1
         s.totals["tool_errors"] += 0 if ok else 1
         s.bus.emit("tool_end", id=call["id"], name=name, agent=self.name, ok=ok, ms=int((time.time() - t0) * 1000),
                    chars=len(out), preview=out[:1500], **({"output": out[:30000]} if s.interactive == "bridge" else {}))

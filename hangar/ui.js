@@ -48,6 +48,7 @@
   const STAGE = {plan: 'Planejamento', execute: 'Execução', work: 'Execução', review: 'Revisão independente'};
   const ROLE_PT = {worker: 'executor', light: 'sub-agente leve', deep: 'sub-agente profundo', sub: 'sub-agente', planner: 'planejador', verifier: 'revisor',
                    escalation: 'reforço', helper: 'auxiliar', perception: 'percepção', studio: 'estúdio'};
+  const MEM_KIND = {command: 'comando', layout: 'estrutura', convention: 'convenção', gotcha: 'armadilha'};
   const WORKFLOWS = {
     chat: ['Conversa', 'Você conversa com o agente em vários turnos e aprova cada ação.'],
     verify: ['Executar e revisar', 'O agente faz a tarefa e um revisor independente, sem o histórico, confere o resultado; se reprovar, o agente corrige (até 3 vezes).'],
@@ -157,6 +158,10 @@
           this.add(h('div', {class: 'sys ' + (ok ? 'ok' : 'err'), 'data-testid': 'verdict'},
             ok ? 'Revisor: aprovado.' : `Revisor: pediu ajustes — ${ev.feedback || 'sem detalhes'}`));
           break; }
+        case 'memory':
+          this.add(h('div', {class: 'sys', 'data-testid': 'memory-line'}, ev.saved ? `Memória do projeto: ${ev.saved.join(', ')} — ${ev.fact || ''}`
+            : `Memória do projeto: ${(ev.stale || []).join(', ')} saiu de uso (${ev.reason || ''})`));
+          break;
         case 'team':
           if (this.readonly) this.add(h('div', {class: 'sys', 'data-testid': 'team-line'}, 'Equipe: ' + (ev.team || []).filter(m => ['worker', 'planner', 'verifier', 'escalation'].includes(m.role))
             .map(m => `${{worker: 'executor', planner: 'planejador', verifier: 'revisor', escalation: 'reforço'}[m.role]} ${String(m.model).split('/').pop()}`).join(' · ')));
@@ -950,6 +955,12 @@
           ...sec('Comandos de barra', d.commands, c => h('div', {class: 'hitem'}, h('b', null, '/' + c.name), ' ', c.hint || '', c.description ? ' — ' + c.description : ''), 'Defina em .claude/commands/<nome>.md.'),
           ...sec('Skills', d.skills, k => h('div', {class: 'hitem'}, h('b', null, k.name), ' — ', k.description), 'Nenhuma skill encontrada.'),
           ...sec('Hooks', Object.entries(d.hooks).filter(([, n]) => n), ([k, n]) => h('div', {class: 'hitem'}, h('b', null, k), ` — ${n} regra${n > 1 ? 's' : ''}`), 'Nenhum hook em .claude/settings.json.'),
+          ...sec('Memória do projeto', d.memory || [], m => h('div', {class: 'hitem' + (m.stale ? ' muted' : ''), 'data-testid': 'memory-fact'},
+              h('b', null, m.name), ` (${MEM_KIND[m.kind] || m.kind}) — `, m.fact, m.command ? h('code', {class: 'mcmd'}, m.command) : null,
+              h('span', {class: 'mmeta'}, m.stale ? `fora de uso: ${m.stale}` : `verificado em ${m.verified || '?'} · confirmado ${m.confirmations}×`),
+              h('button', {class: 'btn small', title: 'Apagar este fato', 'data-testid': 'memory-forget',
+                           onclick: () => api(sapi('forget'), {name: m.name}).then(() => PANELS.harness()).catch(fail)}, 'Esquecer')),
+            'O que o agente confirmar sobre o projeto (como testar, onde ficam as coisas) aparece aqui e em .hangar/memory/.'),
           ...sec('Lições aprendidas', d.lessons, l => h('div', {class: 'hitem'}, h('b', null, l.cue || l.task || 'lição'), ' — ', l.lesson), 'As lições de sessões anteriores aparecem aqui.')));
     }
   };

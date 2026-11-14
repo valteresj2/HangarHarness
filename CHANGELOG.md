@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.6.0
+
+- **Backlog do projeto** (`hangar backlog`, `<projeto>/.hangar/backlog.json`): para objetivos maiores que uma sessão. Um
+  planejador divide o objetivo em tarefas com dependências e um comando de aceite cada; `hangar backlog run` pega a
+  próxima tarefa liberada, uma sessão trabalha nela, e é o harness que roda o comando de aceite — e, em seguida, os
+  comandos de todas as tarefas já concluídas, para nada quebrar. A falha volta para a mesma sessão (até três
+  conferências). `--all`, `--tasks`, `--budget`, `check` (auditoria sem modelo), `reset`, `add`. O plano é validado antes
+  de ser gravado; comandos de aceite repetidos entre tarefas voltam uma vez para o planejador corrigir. O aceite roda no
+  ambiente do usuário, não no do shell do agente.
+- **Memória do projeto** (`<projeto>/.hangar/memory/`): o agente guarda fatos duráveis do projeto — como rodar os
+  testes, onde ficam as coisas, convenções, armadilhas — em arquivos Markdown, um por fato, com um índice que entra no
+  contexto de cada sessão. Um fato só é gravado com uma conferência que o próprio harness faz (o comando saiu com
+  código 0 nesta sessão; os caminhos existem); comandos lembrados que voltam a rodar confirmam ou derrubam o fato sem
+  chamar modelo. Ferramenta `remember`, passagem de fim de sessão no modelo auxiliar (só quando há algo novo),
+  `hangar memory`, `--no-memory`, e a lista no painel Harness do app web.
+- `bench/memory_bench.py`: mede a memória com duas tarefas diferentes no mesmo projeto (aprende na primeira, compara a
+  segunda com e sem memória). O benchmark geral continua rodando sem memória, para cada execução começar do zero.
+
 ## v0.5.0
 
 - **Equipe de modelos gerada do benchmark**: `python bench/roster.py` lê `bench/results/*.json` e grava `hangar/roster.json`,

@@ -124,6 +124,77 @@ resposta e coluna de gasto no botão "Modelos"):
 Os papéis são `worker`, `light`, `deep`, `sub` (sub-agente sem nível), `planner`, `verifier`, `escalation`, `helper`,
 `perception` e `studio` (geração de imagem). A soma dos papéis é o custo total da sessão.
 
+## Backlog: trabalho maior que uma sessão
+
+Uma sessão resolve uma tarefa e esquece. Para um objetivo que não cabe numa sessão — um sistema inteiro, uma migração —
+o harness mantém um backlog em disco: tarefas com dependências e, em cada uma, **um comando de aceite**.
+
+```bash
+hangar backlog plan "Criar um interpretador de calculadora com variáveis, erros claros e CLI" -m auto
+hangar backlog                     # o objetivo, as tarefas, o que está pronto, qual é a próxima
+hangar backlog run                 # trabalha na próxima tarefa (uma sessão)
+hangar backlog run --all --budget 0.50   # segue até não haver mais o que fazer, ou até gastar US$ 0,50
+hangar backlog check               # sem modelo: tudo o que foi dado como pronto continua passando?
+hangar backlog reset [id]          # devolve as tarefas que falharam (ou uma) para a fila
+hangar backlog add "Exportar em CSV" --accept "python -m unittest tests.test_csv" --deps cli
+```
+
+Fica em `<projeto>/.hangar/backlog.json`, um arquivo que dá para ler e editar.
+
+- **Quem diz que está pronto é o harness.** Ao fim da sessão ele mesmo roda o comando de aceite da tarefa; a tarefa só
+  vira `done` se o comando sair com código 0. A palavra do agente não conta.
+- **Nada do que já estava pronto pode quebrar.** Depois do aceite da tarefa, rodam de novo os comandos de aceite de
+  todas as tarefas já concluídas. Se um deles falha, a tarefa não é aceita.
+- **A falha volta para a mesma sessão**, com a saída do comando, até três conferências. Depois disso a tarefa fica
+  `failed`, o que depende dela fica bloqueado, e o harness segue com o que for independente.
+- **O aceite roda no ambiente do usuário**, sem as variáveis que o shell do agente recebe (`PYTHONUTF8`,
+  `PYTHONIOENCODING`): o que passa só no ambiente do agente não passa aqui.
+- **O plano é validado antes de ser gravado**: ids únicos, dependências que existem, sem ciclo, comando de aceite em toda
+  tarefa e nenhum comando destrutivo. Duas tarefas com o mesmo comando são recusadas — para a segunda ele já passaria
+  antes do trabalho — e o planejador recebe o motivo e corrige uma vez.
+- Um aceite que já passa antes de a tarefa começar é marcado como conferência fraca (`weak`) no arquivo.
+- `--budget` é o teto de gasto da chamada inteira; cada sessão continua com o próprio `max_cost_usd`.
+
+Com a memória do projeto ligada, o que uma tarefa descobre (como rodar os testes, onde ficam as coisas) já está no
+contexto da seguinte.
+
+## Memória do projeto
+
+O agente guarda fatos duráveis do projeto em que trabalha, para a próxima sessão não pagar de novo para descobri-los:
+como rodar os testes, onde ficam as coisas, uma convenção do código, uma armadilha.
+
+```text
+<projeto>/.hangar/memory/
+  MEMORY.md            índice, uma linha por fato
+  test-command.md      um arquivo por fato
+  tests-layout.md
+```
+
+São arquivos de texto: dá para ler, editar, apagar e versionar junto com o projeto. Só o índice entra no contexto de
+cada sessão (cerca de uma linha por fato); o detalhe de um fato é lido sob demanda.
+
+O que impede a memória de virar um monte de palpites:
+
+- **Só entra o que o harness consegue conferir.** Um fato do tipo `command` exige que aquele comando exato tenha saído
+  com código 0 na sessão; todo caminho citado precisa existir dentro do projeto; um fato sem comando nem caminho é
+  recusado. Segredos e comandos de uso único (`python -c …`) nunca entram.
+- **Os fatos se mantêm sozinhos, sem chamar modelo.** Quando um comando lembrado roda de novo e passa, o fato é
+  confirmado; se falha duas vezes seguidas, sai do índice. Um fato cujo arquivo sumiu também sai, marcado como fora de uso.
+- **Duas formas de escrever, um portão só.** O agente principal tem a ferramenta `remember`; e, no fim de uma sessão
+  verificada que explorou o projeto sem salvar nada, o modelo auxiliar propõe até três fatos — que passam pela mesma
+  conferência. Se não há nada novo, essa passagem não roda e não gasta tokens.
+- **Limite de 40 fatos por projeto**; os menos confirmados saem primeiro.
+
+```bash
+hangar memory                      # lista os fatos deste projeto
+hangar memory rm test-command      # apaga um
+hangar memory clear                # apaga todos
+hangar run "…" --no-memory         # esta execução não lê nem escreve memória
+```
+
+No app web, os fatos aparecem no painel **Harness**, com botão para esquecer. Sub-agentes, planejador e revisor leem a
+memória, mas só o agente principal escreve. `memory = false` na configuração desliga tudo.
+
 ## O app web (`hangar ui`)
 
 ```bash

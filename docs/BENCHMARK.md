@@ -66,6 +66,23 @@ Custo por tarefa:
 O `pev` com a equipe automática custou cerca de um décimo do `pev` com Sonnet planejando (US$ 0,026–0,060 na tabela
 anterior), com o mesmo resultado nessas duas tarefas. Uma execução por linha, salvo o `bugfix` em `pev` (três).
 
+## Memória do projeto (13/11/2026)
+
+`python bench/memory_bench.py --model auto --runs 4`: projeto de 72 arquivos; a tarefa A (corrigir um bug) roda uma vez
+e deixa a memória; a tarefa B (uma funcionalidade em outro ponto do projeto) roda quatro vezes sem memória e quatro com
+a memória aprendida em A. A sessão de aprendizado gravou três fatos: o comando de verificação, onde ficam os testes e a
+convenção de valores em centavos.
+
+| Tarefa B | Resolvidas | Custo total (mediana) | Custo do executor | Chamadas de ferramenta | Tokens de entrada |
+|---|---|---|---|---|---|
+| sem memória | 4/4 | $0.00173 | $0.00173 | 20 | 47,9k |
+| com memória | 4/4 | $0.00171 | $0.00146 | 17 | 41,1k |
+
+Leitura honesta: o executor gastou 16% menos e fez 15% menos chamadas, mas a passagem de fim de sessão (US$ 0,00024 no
+modelo auxiliar, porque cada sessão ainda encontrou área nova do projeto) consumiu a diferença — o custo total ficou
+igual. Amostra pequena (quatro execuções por lado) e tarefas de menos de um centavo; num projeto de nove arquivos, a
+medição anterior também não mostrou ganho. A memória ainda não se pagou neste benchmark.
+
 ## Leituras
 
 1. **Seis modelos fizeram 7/7**, do Sonnet 5.5 ao GPT-6 Luna; o de 1.7B (`lfm-3-1.7b`) fez 6/7 nesta rodada e 7/7 nas duas anteriores (o erro foi trocar dois dígitos ao copiar a transcrição).

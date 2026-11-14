@@ -63,6 +63,7 @@ def _configure(start: dict) -> dict:
                  "reasoning_effort": start.get("effort"), "max_steps": start.get("max_steps"), "max_cost_usd": start.get("max_cost_usd")}
     cfg = config.load(cwd, overrides)
     cfg["lessons"] = bool(start.get("lessons"))          # a host with its own lessons library leaves this off
+    cfg["memory"] = bool(start.get("memory"))            # project facts in <cwd>/.hangar/memory: the host opts in
     if start.get("base_url"):                            # a foreign gateway: compaction runs on the profile's own model
         cfg["helper_model"] = str(start.get("model"))
     cfg["system_append"] = str(start.get("system_append") or "")
@@ -241,6 +242,13 @@ def main(argv: list[str] | None = None) -> int:
             from . import lessons
             lessons.reflect(s, {"status": "done", "final": last["final"]})
             s.hooks.session_end({"status": "done", "final": last["final"], "session": s.id, "files": sorted(s.files)})
+        except Exception:
+            pass
+    if cfg.get("memory") and last["ok"]:
+        try:
+            s.abort.clear()
+            from . import memory
+            memory.distill(s, {"status": "done", "final": last["final"]})
         except Exception:
             pass
     s.finish("done")

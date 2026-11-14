@@ -210,6 +210,15 @@ class ApiTests(UiBase):
             self.assertEqual(self.c.call(f"{P}/file?path={urllib.request.quote(path)}")[0], 403, path)
             self.assertEqual(self.c.call(f"{P}/raw?path={urllib.request.quote(path)}")[0], 403, path)
 
+        from hangar import memory                                                       # project memory shows in the harness panel
+        (cwd / "run_checks.py").write_text("print('ok')\n", encoding="utf-8")
+        fake = type("S", (), {"cwd": cwd, "id": "s1", "ok_commands": {"python run_checks.py": 1.0}, "memory_saved": [],
+                              "bus": type("B", (), {"emit": staticmethod(lambda *a, **k: None)})()})()
+        self.assertTrue(memory.save(fake, {"name": "test-command", "kind": "command", "fact": "Rode os testes assim", "command": "python run_checks.py"}, "agent")[0])
+        mem = self.c.json(f"{P}/harness")[1]["memory"]
+        self.assertEqual([(m["name"], m["kind"], m["command"], m["stale"]) for m in mem], [("test-command", "command", "python run_checks.py", "")])
+        self.assertEqual(self.c.json(f"{P}/forget", {"name": "test-command"})[1], {"removed": 1})
+        self.assertEqual(self.c.json(f"{P}/harness")[1]["memory"], [])
         code, up = self.c.json(f"{P}/upload?name=nota%20fiscal.txt", raw=b"conteudo do anexo")
         self.assertEqual((code, up["name"], up["size"], up["kind"]), (200, "nota fiscal.txt", 17, "text"))
         self.assertEqual(Path(up["path"]).read_bytes(), b"conteudo do anexo")
