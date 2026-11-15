@@ -346,10 +346,18 @@ class PageTests(UiBase):
         self.assertFalse((cwd / "landing.html").exists())
         self.assertIn("Crie uma landing page", self.text("[data-testid=user-msg]"))
         self.assertIn("Crie uma landing page", self.text("[data-testid=title]"))          # the title came from the prompt
-        b.eval("[...document.querySelectorAll('[data-testid=permission] button')].find(x => x.textContent === 'Permitir').click()")
+        self.assertEqual(b.eval("[...document.querySelectorAll('[data-testid=permission] kbd')].map(k => k.textContent).join('')"), "ASN")
+        b.eval("dispatchEvent(new KeyboardEvent('keydown', {key: 'a', bubbles: true}))")              # the permission is answered from the keyboard
         self.wait("!!document.querySelector('[data-testid=turn-end]')", what="end of turn")
         self.assertEqual((cwd / "landing.html").read_text(encoding="utf-8").splitlines()[1], "<h1>Lançamento 2026</h1>")
         self.assertIn("landing.html foi criado", self.text("[data-testid=assistant-msg]"))
+        b.eval("dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true}))")  # the command palette
+        self.wait("document.querySelectorAll('[data-testid=palette-item]').length > 8", what="command palette")
+        b.eval("(i => { i.value = 'permiss automat'; i.dispatchEvent(new Event('input')); })(document.querySelector('[data-testid=palette-input]'))")
+        self.assertEqual(b.eval("[...document.querySelectorAll('[data-testid=palette-item]')].map(x => x.firstChild.textContent).join('|')"), "Permissões: Automático")
+        b.eval("document.querySelector('[data-testid=palette-item]').click()")
+        self.wait("document.querySelector('[data-testid=perm]').value === 'auto' && !document.querySelector('[data-testid=palette]')", what="permission set from the palette")
+        b.eval("(async () => { await fetch('/api/sessions/' + window.__hangar.cur.id + '/update', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Hangar-Token': window.HANGAR_TOKEN}, body: JSON.stringify({permission: 'ask'})}); })()")
         self.assertEqual(b.eval("document.querySelector('[data-testid=assistant-msg] strong').textContent"), "landing.html")   # markdown
         self.assertIn("Permitido", self.text("[data-testid=perm-result]"))
         self.assertEqual(b.eval("document.querySelector('[data-testid=tool]').dataset.status"), "ok")

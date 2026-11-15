@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.4
+
+- **Paleta de comandos na UI** (`Ctrl+K`, ou o botão no topo): digite para filtrar, setas e Enter para executar. Reúne
+  nova sessão, parar a execução, equipe de modelos, permissões e esforço da sessão, os painéis laterais, tema,
+  configurações, os comandos de barra do projeto e a troca para outra sessão pelo nome.
+- **Permissão pelo teclado**: no cartão de permissão, `A` permite, `S` permite sempre nesta sessão e `N` nega. As teclas
+  aparecem nos botões e só valem quando o foco não está num campo de texto.
+
 ## v0.7.3
 
 - **Diagnósticos após cada edição** (`hangar/diagnose.py`): depois de um `write` ou `edit`, o harness confere o arquivo e
