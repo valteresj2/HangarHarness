@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7.2
+
+- **Ajuste à força do modelo, como opção** (`--fit`, `model_fit = true`): modelo fraco tem de registrar um plano de 3 a 6
+  passos antes de alterar qualquer coisa (o harness cobra o plano, lembra o próximo passo e devolve uma vez o "terminei"
+  com itens abertos); modelo forte recebe um catálogo sem `glob`, `grep` e `web_fetch`, que o shell cobre. Catálogos
+  restritos pelo aplicativo e papéis sem shell não mudam.
+- **Vem desligado, porque a medição não mostrou ganho**: em 120 execuções nas quatro tarefas difíceis de código, o
+  catálogo enxuto não mudou acerto nem custo de forma consistente nos modelos fortes, e o plano obrigatório dobrou o
+  tempo de um modelo barato que já acertava tudo, sem ganho de acerto sustentável nos que falham. Números em
+  `docs/BENCHMARK.md`.
+
 ## v0.7.1
 
 - **O harness executa as checagens do crítico**: cada defeito pode vir com um comando de leitura que falha agora e passa

@@ -204,6 +204,30 @@ instruções dele; os 2 de 3 da versão intermediária não se repetiram e devem
 24 revisões. Com três rodadas por configuração, as diferenças de custo e de tempo entre as três versões também não
 permitem conclusão.
 
+## Ajuste à força do modelo: um resultado negativo (14/11/2026)
+
+Um estudo de desenho de harness relata que planejamento aumenta o acerto de modelos fracos e que modelos fortes vão bem
+com poucas ferramentas além do shell. Implementamos as duas coisas atrás de `--fit` e medimos com e sem, três rodadas
+por braço, intercaladas, nas tarefas `kvstore`, `pipeline`, `refactor` e `tinylang` (12 execuções por modelo e braço).
+
+| modelo (nível) | acerto sem / com | custo total US$ sem / com | passos (mediana) sem / com | tempo mediano sem / com |
+|---|---|---|---|---|
+| claude-sonnet-5.5 (forte) | 12/12 / 12/12 | 0,95 / 0,93 | 6 / 6 | 21 s / 25 s |
+| gpt-6.1-terra (forte) | 12/12 / 12/12 | 0,64 / 0,49 | 12 / 15 | 67 s / 86 s |
+| deepseek-v4.1-flash (fraco) | 12/12 / 12/12 | 0,16 / 0,15 | 16 / 28 | 56 s / 114 s |
+| lfm-3-1.7b (fraco) | 0/12 / 2/12 | 0,28 / 0,39 | 35 / 44 | 220 s / 267 s |
+| nex-n2.5-mini (fraco) | 0/12 / 0/12 | 0,09 / 0,13 | 48 / 61 | 182 s / 407 s |
+
+Leitura: nos modelos fortes, tirar três ferramentas não mudou nada de forma consistente (a queda no total do
+gpt-6.1-terra vem de poucas execuções caras no braço sem ajuste; a mediana por tarefa é a mesma). Nos fracos, o plano
+custa um passo inteiro a cada atualização, porque eles fazem uma chamada por vez: o modelo que já acertava tudo levou o
+dobro do tempo e 2,3 vezes mais tokens de entrada, e dois acertos em 24 contra zero em 24 não bastam para afirmar ganho.
+O nex-n2.5-mini não acertou nada em nenhum braço neste dia, embora tenha acertado parte dessas tarefas antes; a causa
+não foi investigada. Por isso o ajuste fica desligado por padrão.
+
+Duas explicações prováveis para o achado não se repetir aqui: o Hangar já reduzia ferramentas e forçava uma chamada por
+vez para modelo fraco, e o nível "fraco" é definido por preço, o que inclui modelos baratos e capazes.
+
 ## Limites deste benchmark
 
 - Tarefas pequenas (segundos a minutos), uma execução por célula na tabela principal: boa para comparar ordens de grandeza de custo e achar bugs do harness, fraca para diferenças finas de qualidade. Modelos fracos variam bastante entre rodadas.

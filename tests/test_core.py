@@ -237,6 +237,51 @@ class RobustnessTests(unittest.TestCase):
         self.assertEqual((self.tmp / "relatorio.md").read_text(encoding="utf-8"), "versao que passou")
         self.assertTrue(self.s.skill_gates["x"])
 
+    def test_harness_fits_the_model_tier(self):
+        from hangar import prompts, tools as T
+        from hangar.agent import Agent
+        from hangar.llm import Reply
+        self.s.cfg["tiers"].update({"forte/x": "strong", "fraco/x": "weak"})
+        self.s.cfg["verify_nudge"] = False
+        self.assertFalse(self.s.cfg["model_fit"])                                          # opt-in: the ablation showed no clear gain
+        self.s.cfg["model_fit"] = True
+        self.s.cfg.setdefault("model_info", {}).update({"forte/x": {"tools": True}, "fraco/x": {"tools": True}})
+        lean = {t.name for t in T.select(self.s, "all", "strong", "main")}
+        full = {t.name for t in T.select(self.s, "all", "standard", "main")}
+        self.assertEqual(full - lean, {"glob", "grep", "web_fetch"})                       # the shell covers them
+        self.assertTrue({"shell", "read", "edit", "write", "plan"} <= lean)
+        self.assertNotIn("grep/glob", prompts.build(self.s, Agent(self.s, model="forte/x", name="s")))
+        self.assertIn("grep", {t.name for t in T.select(self.s, "readonly", "strong", "planner")})   # no shell there: keep them
+        weak = Agent(self.s, model="fraco/x", name="w")
+        self.assertIn("Plan first", prompts.build(self.s, weak))
+        self.assertNotIn("Small tasks need no plan", prompts.build(self.s, weak))
+        seen, n = [], {"i": 0}
+
+        def call(name, args):
+            return [{"id": f"c{n['i']}", "name": name, "arguments": json.dumps(args)}]
+
+        def chat(model, messages, **k):
+            seen.append(json.dumps(messages[-1], ensure_ascii=False, default=str))
+            n["i"] += 1
+            i = n["i"]
+            if i <= 3:
+                r = Reply(content="", finish="tool_calls", usage={"prompt": 5, "completion": 5, "cost": 0.0}, model=model)
+                r.tool_calls = call("glob", {"pattern": f"*.x{i}"})
+                return r
+            if i == 4:
+                r = Reply(content="", finish="tool_calls", usage={"prompt": 5, "completion": 5, "cost": 0.0}, model=model)
+                r.tool_calls = call("plan", {"items": [{"step": "ler", "status": "done"}, {"step": "corrigir o bug", "status": "pending"}]})
+                return r
+            return Reply(content=f"pronto {i}", finish="stop", usage={"prompt": 5, "completion": 5, "cost": 0.0}, model=model)
+        self.s.llm.chat = chat
+        self.assertEqual(weak.run("corrija"), "pronto 6")
+        self.assertTrue(any("No plan recorded yet" in m for m in seen))                    # asked once, after a first look
+        self.assertEqual(sum("No plan recorded yet" in m for m in seen), 1)
+        self.assertTrue(any("corrigir o bug" in m and "not done" in m for m in seen))      # "done" with the plan open: sent back once
+        self.s.cfg["model_fit"] = False                                                    # the switch for the ablation
+        self.assertEqual({t.name for t in T.select(self.s, "all", "strong", "main")}, full)
+        self.assertIn("Small tasks need no plan", prompts.build(self.s, Agent(self.s, model="fraco/x", name="w2")))
+
     def test_background_process(self):
         out = self.b["shell"].fn(self.ctx, {"command": "echo started; sleep 30", "background": True})
         self.assertIn("bg1", out)
