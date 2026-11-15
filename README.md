@@ -133,7 +133,8 @@ hangar run "analise vendas.csv e entregue um relatório" -m auto --critic
 O modelo barato faz o trabalho; o mais forte da lista é pago só para julgar. Antes de aceitar o "terminei", o harness
 passa a entrega por três camadas, da mais barata para a mais cara:
 
-1. **Checagens gratuitas**: o último comando saiu com código 0, os ganchos do projeto passaram.
+1. **Checagens gratuitas**: o último comando saiu com código 0, os ganchos do projeto passaram. Antes disso, cada `write` e `edit`
+   já devolve erros de sintaxe e nomes indefinidos do arquivo no próprio resultado da ferramenta.
 2. **Trava da skill**: a skill carregada declara o comando que prova que o trabalho terminou (na análise de dados,
    `hangar studio report check`); enquanto ele não passar, o agente volta ao trabalho com a lista do que falta.
 3. **Crítico** (`--critic`): uma chamada, sem ferramentas, sobre um resumo dos arquivos entregues. Devolve até três

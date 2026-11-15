@@ -228,6 +228,31 @@ não foi investigada. Por isso o ajuste fica desligado por padrão.
 Duas explicações prováveis para o achado não se repetir aqui: o Hangar já reduzia ferramentas e forçava uma chamada por
 vez para modelo fraco, e o nível "fraco" é definido por preço, o que inclui modelos baratos e capazes.
 
+## Diagnósticos após cada edição (15/11/2026)
+
+Depois de cada `write` ou `edit` o harness confere o arquivo (sintaxe e nomes indefinidos em Python, validade de JSON e
+TOML, sintaxe de JavaScript) e devolve o problema no mesmo resultado. Medido com e sem (`--no-diagnostics`), três
+rodadas por braço, nas tarefas `kvstore`, `pipeline`, `refactor` e `tinylang` (12 execuções por modelo e braço).
+
+| modelo | acerto sem / com | custo total US$ sem / com | tempo mediano sem / com |
+|---|---|---|---|
+| claude-haiku-5.5 | 11/12 / 12/12 | 0,102 / 0,104 | 33 s / 32 s |
+| gpt-6-luna | 12/12 / 12/12 | 0,038 / 0,049 | 44 s / 55 s |
+| deepseek-v4.1-flash | 12/12 / 12/12 | 0,161 / 0,165 | 48 s / 136 s |
+| lfm-3-1.7b | 0/12 / 0/12 | 0,067 / 0,110 | 143 s / 220 s |
+| nex-n2.5-mini | 2/12 / 1/12 | 0,124 / 0,115 | 409 s / 416 s |
+| total | 37/60 / 37/60 | 0,49 / 0,54 | |
+
+Leitura: o acerto não mudou. Os diagnósticos dispararam em 10 das 60 execuções do braço ligado, e todos apontavam um
+erro real (um módulo usado sem importar, nomes deixados para trás numa refatoração, dois erros de sintaxe); três foram
+em modelos que resolvem tudo, que corrigiram em seguida. O custo total do braço ligado foi 10% maior, o que não dá para
+atribuir ao mecanismo: ele só acrescenta texto quando há erro, e foram poucas linhas no experimento inteiro. Estas
+tarefas têm teste, então o agente descobre o mesmo erro ao rodá-lo logo depois; o efeito em tarefas sem teste pronto
+não foi medido. A terceira rodada do braço desligado foi interrompida e refeita em separado.
+
+Falsos positivos do verificador de nomes: 3 em cerca de 1.200 arquivos da biblioteca padrão do Python (nomes criados
+dinamicamente), fora os arquivos de teste que erram de propósito.
+
 ## Limites deste benchmark
 
 - Tarefas pequenas (segundos a minutos), uma execução por célula na tabela principal: boa para comparar ordens de grandeza de custo e achar bugs do harness, fraca para diferenças finas de qualidade. Modelos fracos variam bastante entre rodadas.

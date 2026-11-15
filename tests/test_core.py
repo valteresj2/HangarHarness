@@ -282,6 +282,26 @@ class RobustnessTests(unittest.TestCase):
         self.assertEqual({t.name for t in T.select(self.s, "all", "strong", "main")}, full)
         self.assertIn("Small tasks need no plan", prompts.build(self.s, Agent(self.s, model="fraco/x", name="w2")))
 
+    def test_diagnostics_ride_on_write_and_edit(self):
+        from hangar import diagnose
+        out = self.b["write"].fn(self.ctx, {"path": "m.py", "content": "import os\n\ndef f(x):\n    return os.path.join(x, nome)\n"})
+        self.assertIn("[diagnostics] m.py:4: undefined name 'nome'", out)
+        out = self.b["edit"].fn(self.ctx, {"path": "m.py", "old": "nome)", "new": "'a'"})
+        self.assertIn("syntax error", out)                                                  # the edit dropped the parenthesis
+        out = self.b["edit"].fn(self.ctx, {"path": "m.py", "old": "'a'", "new": "'a')"})
+        self.assertNotIn("[diagnostics]", out)                                              # a clean file says nothing
+        ok = ("from typing import TYPE_CHECKING\nimport sys as s\nclass A:\n    k = 1\n    def m(self):\n        global G\n        G = [i for i in range(self.k)]\n"
+              "        return len(G) + s.maxsize + __name__.count('a')\ntry:\n    import json\nexcept ImportError:\n    json = None\nfor n in (1, 2):\n    print(n, json, A)\n")
+        (self.tmp / "ok.py").write_text(ok, encoding="utf-8")
+        self.assertEqual(diagnose.check(self.tmp / "ok.py"), [])
+        (self.tmp / "dyn.py").write_text("from os.path import *\nprint(join('a', qualquer))\n", encoding="utf-8")
+        self.assertEqual(diagnose.check(self.tmp / "dyn.py"), [])                           # star import: cannot be judged, so silent
+        (self.tmp / "c.json").write_text('{"a": 1,}', encoding="utf-8")
+        self.assertIn("invalid JSON", diagnose.check(self.tmp / "c.json")[0])
+        self.assertEqual(diagnose.check(self.tmp / "notas.md"), [])
+        self.s.cfg["diagnostics"] = False
+        self.assertNotIn("[diagnostics]", self.b["write"].fn(self.ctx, {"path": "n.py", "content": "def f(:\n"}))
+
     def test_background_process(self):
         out = self.b["shell"].fn(self.ctx, {"command": "echo started; sleep 30", "background": True})
         self.assertIn("bg1", out)

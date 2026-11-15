@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.7.3
+
+- **Diagnósticos após cada edição** (`hangar/diagnose.py`): depois de um `write` ou `edit`, o harness confere o arquivo e
+  devolve o problema no mesmo resultado da ferramenta, por exemplo `[diagnostics] m.py:4: undefined name 'nome'`. Em
+  Python: sintaxe e nomes nunca atribuídos nem importados no arquivo; JSON e TOML: se o arquivo é válido; JavaScript:
+  sintaxe via `node --check`, quando o Node está instalado. Sem servidor de linguagem e sem dependência. Arquivo limpo
+  não gera texto. Módulos com `import *`, `globals()` ou `exec` são ignorados. `--no-diagnostics` ou
+  `diagnostics = false` desliga.
+- **O que a medição mostrou**: em 120 execuções o acerto foi igual com e sem (37 de 60). Os diagnósticos dispararam em
+  10 das 60 execuções, sempre com erro real. Ficam ligados porque não custam nada quando o arquivo está certo; o ganho
+  em tarefas sem teste pronto ainda não foi medido. Números em `docs/BENCHMARK.md`.
+
 ## v0.7.2
 
 - **Ajuste à força do modelo, como opção** (`--fit`, `model_fit = true`): modelo fraco tem de registrar um plano de 3 a 6
