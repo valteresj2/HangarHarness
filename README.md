@@ -305,7 +305,11 @@ Ao fim de uma sessão, um modelo auxiliar barato pode registrar até 2 lições 
 - **Só aprende do que foi verificado**: a sessão precisa ter terminado `done` com o último comando em sucesso (ou revisor aprovando) **e** ter tido atrito real. Sem atrito não há chamada extra, logo não há custo.
 - **Com procedência**: cada lição guarda sessão, modelo, data, pasta e a evidência em que se apoia.
 - **Sem acúmulo**: lição parecida é fundida (conta confirmações), expira em 90 dias e a biblioteca tem teto de 200.
-- **Escopo**: `project` vale só para aquela pasta; `general` vale para a máquina e entra apenas se combinar com a tarefa nova.
+- **Escopo**: `project` vale só para aquela pasta; `general` vale para a máquina e entra apenas se combinar com a tarefa nova: duas palavras significativas em comum com a lição, ou uma tarefa de origem que é essencialmente a mesma. Lições marcadas como peculiaridade da máquina ou das ferramentas entram em qualquer tarefa, no máximo duas por sessão.
+- **Previsão e resultado**: a lição guarda o `signal`, um trecho literal do erro que ela diz evitar. Ao fim de cada sessão em que foi mostrada, o harness anota, sem chamar modelo, se a sessão terminou verificada e se aquele erro apareceu de novo. `hangar lessons` mostra o histórico (`tried`, `ok`, `recurred`).
+- **Aposentadoria**: lição cujo erro voltou em metade dos usos ou mais (mínimo de duas vezes), ou que passou por quatro usos em dois modelos sem nenhuma sessão verificada, deixa de ser mostrada; fica no disco com o histórico.
+- **Sinal tem de dizer algo**: mensagens que qualquer falha imprime (`file not found`, código de saída) não valem como sinal, e sinais que só diferem em pontuação contam como o mesmo problema, com uma dica só.
+- **Nível do modelo**: o que um modelo fraco precisou aprender não é empurrado para um modelo forte.
 - **Não aprende a contornar regra**: o que um gancho bloqueou é política, não lição.
 
 `python -m hangar lessons` lista (com evidência), `lessons rm <id>` e `lessons clear` removem; `--no-lessons` desliga numa execução (o benchmark roda sempre assim).

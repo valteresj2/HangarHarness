@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -426,6 +427,79 @@ class LessonTests(unittest.TestCase):
         got = self.lessons.reflect(s, {"status": "done", "final": "ok"})
         self.assertEqual([l["title"] for l in got], ["Porta ocupada no Windows"])
         self.assertEqual(got[0]["session"], s.id)                                                 # provenance
+
+    def test_a_lesson_is_held_to_what_it_predicts(self):
+        L = self.lessons
+        reply = self.REPLY.replace('"evidence"', '"signal": "Address Already  in use", "evidence"')
+        s = self.new_session(reply)
+        self.friction(s, approved=True)
+        got = L.reflect(s, {"status": "done", "final": "ok"})
+        self.assertEqual((got[0]["signal"], got[0]["tier"]), ("address already in use", s.catalog.info(s.model)["tier"]))
+        made_up = self.new_session('[{"scope": "general", "title": "Limpar o cache antes", "situation": "build falhando sem motivo", "lesson": '
+                                   '"Apague a pasta de cache e rode o build de novo.", "signal": "connection refused by peer", "evidence": "3 falhas"}]')
+        self.friction(made_up, approved=True)
+        self.assertEqual(L.reflect(made_up, {"status": "done", "final": "ok"})[0]["signal"], "")   # not in the log: nothing to hold it to
+        task = "subir o servidor de teste numa porta livre"
+        fine = self.new_session("[]")
+        self.assertIn("socket.bind(0)", L.prompt_block(fine, task))
+        fine.last_exit, fine.edits_since_run = 0, False
+        self.assertEqual(L.settle(fine, {"status": "done", "final": "ok"}), [])
+        d = next(x for x in L.load() if x.get("signal"))
+        self.assertEqual((d["tried"], d["ok"], d["recurred"], d["last"]["verified"]), (1, 1, 0, True))
+        self.assertEqual(L.settle(fine, {"status": "done", "final": "ok"}), [])                    # settled once per session
+        self.assertEqual(next(x for x in L.load() if x.get("signal"))["tried"], 1)
+        for n in range(2):                                                                         # shown, and the same failure happens anyway
+            again = self.new_session("[]")
+            self.assertIn("socket.bind(0)", L.prompt_block(again, task))
+            self.friction(again)
+            retired = L.settle(again, {"status": "incomplete", "final": ""})
+            self.assertEqual(len(retired), n)                                                      # retired on the second comeback
+        d = next(x for x in L.load() if x.get("signal"))
+        self.assertEqual((d["tried"], d["ok"], d["recurred"]), (3, 1, 2))
+        self.assertIn("came back", d["retired"])
+        self.assertNotIn("socket.bind(0)", L.prompt_block(self.new_session("[]"), task))           # kept on disk, no longer shown
+        d.pop("retired"); d["tier"] = "weak"; L._save(d)
+        strong = self.new_session("[]")
+        strong.cfg["tiers"][strong.model] = "strong"
+        self.assertNotIn("socket.bind(0)", L.prompt_block(strong, task))                           # what a weak model needed is not pushed on a strong one
+        strong.cfg["tiers"][strong.model] = "standard"
+        self.assertIn("socket.bind(0)", L.prompt_block(strong, task))
+
+    def test_a_lesson_only_goes_where_it_has_something_to_say(self):
+        L = self.lessons
+        L.DIR.mkdir(parents=True, exist_ok=True)
+
+        def put(name, **kw):
+            d = {"title": name, "situation": "", "lesson": name, "evidence": "e", "scope": "general", "project": "x", "task": "",
+                 "created": time.time(), "uses": 0, "signal": "", "tier": "standard", **kw}
+            (L.DIR / f"{name}.json").write_text(json.dumps(d), encoding="utf-8")
+
+        server = "Implemente o servidor descrito em SPEC.md, suba o servidor e teste as rotas e a persistência"
+        put("http", lesson="Verifique se o processo continua ativo e capture o stderr.", task=server)
+        put("tmp", lesson="Não presuma que /tmp exista.", applies="always")
+        for n in range(3):
+            put(f"quirk{n}", lesson=f"Peculiaridade {n} da ferramenta.", applies="always")
+        s = self.new_session("[]")
+        titles = lambda task: [d["title"] for d in L.select(s, task)]  # noqa: E731
+        self.assertIn("http", titles(server))                                             # the same kind of task
+        other = titles("Implemente em tiny.py um interpretador da linguagem descrita em TINY.md e teste cada regra")
+        self.assertNotIn("http", other)                                                   # shares only words every task has
+        self.assertEqual(len(other), L.LOOSE)                                             # "applies to anything" is rationed
+        for generic in ("File not found", "no such file or directory", "[exit 128]", "Traceback (most recent call last):", "bad value"):
+            self.assertEqual(L._signal(generic), "", generic)                             # seeing it again proves nothing
+        self.assertEqual(L._signal("Error: old and new are identical."), "error: old and new are identical.")
+        self.assertEqual(L._sigkey("Address already in use:"), L._sigkey("address  already in use"))
+        put("a", lesson="Escolha uma porta livre.", task=server, signal="address already in use")
+        put("b", lesson="Feche o servidor antigo primeiro.", task=server, signal="Address already in use:")
+        self.assertEqual(len({"a", "b"} & set(titles(server))), 1)                        # one hint per recurring problem
+        put("blank", lesson="Dica que ninguém confirmou.", task=server, tried=3, ok=0, models=["weak/one"])
+        hopeless = self.new_session("[]")
+        hopeless.model = "weak/one"
+        hopeless.lessons_used = [str(L.DIR / "blank.json")]
+        self.assertEqual(L.settle(hopeless, {"status": "incomplete", "final": ""}), [])   # one model failing is about the model
+        second = self.new_session("[]")
+        second.lessons_used = [str(L.DIR / "blank.json")]
+        self.assertEqual(len(L.settle(second, {"status": "incomplete", "final": ""})), 1)
 
     def test_reuse_dedupe_expiry_and_opt_out(self):
         s = self.new_session(self.REPLY)

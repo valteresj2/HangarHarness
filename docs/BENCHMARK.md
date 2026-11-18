@@ -253,6 +253,34 @@ não foi medido. A terceira rodada do braço desligado foi interrompida e refeit
 Falsos positivos do verificador de nomes: 3 em cerca de 1.200 arquivos da biblioteca padrão do Python (nomes criados
 dinamicamente), fora os arquivos de teste que erram de propósito.
 
+## Lições com previsão e resultado (18/11/2026)
+
+Oito rodadas seguidas com a biblioteca de lições ligada, numa biblioteca vazia e isolada: três modelos nas quatro tarefas
+difíceis de código, 96 execuções, US$ 0,81. As quatro primeiras rodadas usaram a primeira versão (lição com `signal`,
+histórico e aposentadoria); as quatro últimas, a versão publicada, depois de corrigir o que as primeiras mostraram. A
+referência sem lições é o braço com diagnósticos da seção anterior.
+
+| Modelo | Sem lições | Primeira versão | Versão publicada |
+|---|---|---|---|
+| `deepseek/deepseek-v4.1-flash-1017` | 12/12 | 16/16 | 16/16 |
+| `openai/gpt-6-luna` | 12/12 | 13/16 | 15/16 |
+| `nex-agi/nex-n2.5-mini` | 1/12 | 0/16 | 1/16 |
+
+- **Não há ganho de acerto medido, nem prejuízo.** Na versão publicada, a única falha do `gpt-6-luna` aconteceu na
+  rodada 1, antes de existir qualquer lição; com lições ele acertou 12 de 12. Custo por rodada entre US$ 0,09 e 0,13
+  nas duas versões.
+- **O que a primeira versão errava**: lições chegavam a tarefas sem relação (a de respostas HTTP vazias foi entregue na
+  tarefa do interpretador; outra apareceu em 18 sessões) e 4 dos 7 sinais eram genéricos (`file not found`, `[exit 128]`).
+  Uma lição sem sinal estava a um uso de ser aposentada só por ter sido mostrada ao modelo que não passa em nada.
+- **Na versão publicada**: a lição de testes HTTP só foi entregue na tarefa do servidor; 7 das 8 lições têm sinal, todos
+  específicos (`missing required argument(s): path.`). A mais usada foi tentada 32 vezes e o erro voltou 4.
+- **O que continua ruim**: o revisor marcou 6 das 8 lições como válidas para qualquer tarefa (o teto de duas por sessão
+  segura o efeito); três lições parecidas sobre argumento obrigatório faltando não se fundiram; com seis sessões em
+  paralelo os contadores perdem atualizações (uma lição ficou com 6 usos e 9 tentativas).
+- **O que não foi medido**: a aposentadoria. Nenhuma lição foi aposentada em oito rodadas; o efeito dela só aparece com
+  semanas de acúmulo. A queda de erros de ferramenta do `nex-n2.5-mini` vista nas quatro primeiras rodadas (37, 13, 5, 9)
+  não se repetiu nas quatro últimas (24, 36, 22, 17).
+
 ## Limites deste benchmark
 
 - Tarefas pequenas (segundos a minutos), uma execução por célula na tabela principal: boa para comparar ordens de grandeza de custo e achar bugs do harness, fraca para diferenças finas de qualidade. Modelos fracos variam bastante entre rodadas.

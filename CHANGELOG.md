@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.7.5
+
+- **Lições com previsão e resultado**: cada lição passa a guardar o `signal`, um trecho literal do erro que ela diz
+  evitar (o revisor só pode citar o que está no registro da sessão). Ao fim de toda sessão em que a lição foi mostrada,
+  o harness anota, sem chamada de modelo, se a sessão terminou verificada e se aquele erro apareceu de novo. `hangar
+  lessons` mostra o histórico.
+- **Aposentadoria**: lição cujo erro voltou em metade dos usos ou mais (mínimo de duas vezes), ou que teve quatro usos
+  em pelo menos dois modelos sem nenhuma sessão verificada, deixa de ser mostrada e fica no disco com o histórico.
+- **Seleção mais rígida**: uma lição geral só entra se tiver duas palavras significativas em comum com a tarefa ou se a
+  tarefa de origem for essencialmente a mesma; palavras que toda tarefa de programação tem não contam. Lições marcadas
+  pelo revisor como peculiaridade da máquina ou das ferramentas (`applies: always`) entram em qualquer tarefa, no máximo
+  duas por sessão. Antes, uma lição sobre respostas HTTP vazias chegava a uma tarefa de escrever um interpretador.
+- **Sinais genéricos recusados** (`file not found`, `no such file or directory`, códigos de saída), inclusive em lições
+  já gravadas; sinais que só diferem em maiúsculas, espaços ou pontuação são o mesmo problema: as lições se fundem e só
+  uma dica é mostrada.
+- **Nível do modelo**: a lição registra o nível do modelo que a aprendeu; lição geral de modelo fraco não é mostrada a
+  modelo forte.
+- **O que a medição mostrou**: em 96 execuções com a biblioteca ligada (três modelos, quatro tarefas, oito rodadas) não
+  houve ganho de acerto nem prejuízo mensurável. A aposentadoria não pôde ser avaliada: precisa de semanas de uso.
+  Limites conhecidos: o revisor marca lições demais como `always`, e os contadores perdem atualizações quando várias
+  sessões terminam ao mesmo tempo. Números em `docs/BENCHMARK.md`.
+
 ## v0.7.4
 
 - **Paleta de comandos na UI** (`Ctrl+K`, ou o botão no topo): digite para filtrar, setas e Enter para executar. Reúne
