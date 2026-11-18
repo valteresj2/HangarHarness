@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.6
+
+- **Workflows dinâmicos, experimental e desligado por padrão** (`--workflows` ou `workflows = true`): o agente principal
+  ganha a ferramenta `run_workflow` e declara um plano em JSON com passos `map` (um subagente por item, em paralelo),
+  `agent` e `shell`. `over` aceita lista, `glob:<padrão>` ou o resultado de um passo anterior; `fields` obriga cada
+  subagente a terminar com um objeto JSON. O plano é dado, não código: nada do modelo é executado, e plano inválido é
+  recusado sem gastar chamada.
+- **Resultados fora do contexto**: cada passo grava em `workflow/runN/<id>.json` na pasta da sessão e o agente recebe
+  só um resumo. Itens já resolvidos ficam em cache; falha de um item não derruba os outros.
+- **Limites**: `workflow_max_calls` (40 subagentes por sessão), `workflow_parallel` (6 simultâneos); subagentes somente
+  leitura por padrão e sem poder criar outros.
+- **Duas tarefas novas no benchmark**: `contracts` (24 contratos com aditivos e revogações) e `audit` (18 módulos, 10
+  com defeito).
+- **O que a medição mostrou**: em `contracts`, o `gpt-6-luna` passou de 0/3 para 2/3 pelo dobro do custo; `deepseek`,
+  `claude-haiku-5.5` e `claude-sonnet-5.5` não ganharam nada (resolvem com um script). Em `audit` nenhum modelo usou a
+  ferramenta: a tarefa cabe num contexto. Não foi medido o caso em que a literatura mostra ganho, volume maior que um
+  contexto e que não se resolve com script. Fora desta versão: nó `map` nos workflows fixos e os passos do plano no
+  grafo ao vivo. Números em `docs/BENCHMARK.md`, Parte 5.
+
 ## v0.7.5
 
 - **Lições com previsão e resultado**: cada lição passa a guardar o `signal`, um trecho literal do erro que ela diz

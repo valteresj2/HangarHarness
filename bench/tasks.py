@@ -312,3 +312,11 @@ TASKS.update(STUDIO)
 from tasks_data import DATA  # noqa: E402
 
 TASKS.update(DATA)
+
+from tasks_wide import WIDE  # noqa: E402
+
+TASKS.update(WIDE)
+
+from tasks_audit import AUDIT  # noqa: E402
+
+TASKS.update(AUDIT)

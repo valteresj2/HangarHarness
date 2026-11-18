@@ -429,3 +429,52 @@ O que os resultados mudaram no harness:
 
 Não reexecutei os modelos depois dessas mudanças nas skills, então o efeito delas sobre os vídeos ainda não foi medido.
 
+---
+
+# Parte 5 — Workflows dinâmicos (`run_workflow`), 18/11/2026
+
+Pergunta: dar ao agente uma ferramenta para dividir o trabalho em subagentes melhora o resultado em tarefas com muitos
+itens independentes? Dois braços por tarefa: um loop só, e o mesmo loop com `--workflows`. Três rodadas por modelo (uma
+para o Sonnet).
+
+## Tarefa `contracts`
+
+24 contratos em texto, cada um com aditivos e revogações; a entrega é um `resumo.json` com três campos vigentes por
+contrato. Passa só com 24/24. 21 execuções, US$ 0,39.
+
+| Modelo | Um loop | Com `--workflows` | Usou a ferramenta | Custo médio |
+|---|---|---|---|---|
+| `gpt-6-luna` | 0/3 (20, 22 e 16 de 24) | 2/3 (24, 23 e 24) | 3 de 3 | US$ 0,007 → 0,014 |
+| `deepseek-v4.1-flash` | 3/3 | 3/3 | 1 de 3 | US$ 0,013 → 0,019 |
+| `claude-haiku-5.5` | 3/3 | 2/3 | 1 de 3 | a execução que usou: 23/24 e US$ 0,033 |
+| `claude-sonnet-5.5` | 1/1 | 1/1 | nunca | sem diferença |
+
+- O `gpt-6-luna` lê contrato por contrato e erra alguns quando faz isso num contexto só; com um subagente por contrato
+  acerta. É o único ganho medido.
+- `deepseek`, `haiku` e `sonnet` resolvem escrevendo um programa que lê os contratos. Para eles a tarefa é programável,
+  e o workflow só acrescenta custo. A única falha do Haiku foi justamente na vez em que usou a ferramenta.
+- Sem a instrução no prompt de sistema sobre quando usar a ferramenta, o `gpt-6-luna` não a chamou nenhuma vez.
+
+## Tarefa `audit`
+
+18 módulos com duas funções cada; 10 funções não cumprem a própria docstring. A entrega aponta, por módulo, `ok` ou o
+nome da função com defeito. Feita para não ser programável. 20 execuções, US$ 0,15.
+
+| Modelo | Um loop | Com `--workflows` | Usou a ferramenta |
+|---|---|---|---|
+| `deepseek-v4.1-flash` | 3/3 | 3/3 | nunca |
+| `gpt-6-luna` | 2/3 | 3/3 | nunca |
+| `claude-haiku-5.5` | 1/3 | 2/3 | nunca |
+| `claude-sonnet-5.5` | 1/1 | 1/1 | nunca |
+
+Nenhum modelo chamou `run_workflow`, então os dois braços rodaram a mesma coisa e a diferença entre eles é ruído. Toda
+falha foi um único defeito não visto (17/18); não houve falso alarme. A tarefa ficou pequena: os 18 módulos somam cerca
+de 8 mil caracteres e cabem com folga num contexto.
+
+## Limites desta parte
+
+- O ganho vem de um modelo, numa tarefa, em três rodadas.
+- Não foi medido o caso em que a literatura mostra vantagem para subagentes: material maior que um contexto e que não
+  se resolve com script. Texto gerado por regras ou vira programável, ou fica pequeno; uma tarefa assim pede material
+  real e gabarito feito à mão.
+- Por isso o recurso sai desligado por padrão.

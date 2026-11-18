@@ -347,6 +347,26 @@ Workflows próprios são JSON em `.hangar/workflows/<nome>.json` com nós `agent
 
 Todo nó tem limite de visitas; o estado é salvo em `checkpoint.json` após cada nó.
 
+### Workflows dinâmicos (experimental, desligado por padrão)
+
+Com `--workflows` (ou `workflows = true`), o agente principal ganha a ferramenta `run_workflow`: em vez de ler item por item no próprio contexto, ele declara um plano em JSON e o harness executa. É para o mesmo trabalho cuidadoso repetido sobre muitos itens independentes (40 contratos, 30 módulos).
+
+```json
+{"steps": [
+  {"id": "ler", "type": "map", "over": "glob:contratos/*.txt",
+   "prompt": "Leia {item} e extraia os dados vigentes.", "fields": ["valor", "prazo", "parte"]},
+  {"id": "juntar", "type": "shell", "command": "python montar.py {ler.path}"}
+], "save": "resumo.json"}
+```
+
+- **Três tipos de passo**: `map` (um subagente por item, em paralelo), `agent` (um subagente) e `shell` (comando determinístico). `over` aceita uma lista, `glob:<padrão>` ou `$<id de um passo anterior>`.
+- **O plano é dado, não código**: não há script do modelo para executar, então não precisa de sandbox. Um plano inválido é recusado antes de gastar qualquer chamada.
+- **Resultados ficam em arquivos** (`workflow/runN/<id>.json` na pasta da sessão); o agente principal recebe só um resumo curto. Com `fields`, cada subagente tem de terminar com um objeto JSON com aqueles campos.
+- **Limites**: `workflow_max_calls` (40 subagentes por sessão) e `workflow_parallel` (6 ao mesmo tempo). Subagentes são somente leitura por padrão e não criam outros subagentes. Falha de um item não derruba os demais; passo `shell` que falha interrompe o plano.
+- **Cache**: repetir o plano não refaz itens já resolvidos com o mesmo modelo e o mesmo pedido.
+
+O que foi medido (em `docs/BENCHMARK.md`, Parte 5): numa tarefa de 24 contratos, o `gpt-6-luna` passou de 0/3 para 2/3 pelo dobro do custo. Os outros três modelos não ganharam nada: resolvem a tarefa escrevendo um script, ou ignoram a ferramenta. Por isso fica desligado por padrão.
+
 ## Configuração (`hangar.toml` no projeto ou `~/.hangar/config.toml`)
 
 ```toml
@@ -371,6 +391,7 @@ api_key_env = "MEU_GATEWAY_KEY"
 - `web_search` usa a página HTML do DuckDuckGo (sem chave) e pode falhar; conecte um MCP de busca para uso sério.
 - `undo` cobre só o que passou por `write`/`edit`; o que um comando de shell alterou não é desfeito.
 - O bloqueio de "matar por nome" e a lista de comandos destrutivos são heurísticas por padrão de texto: um comando ofuscado passa.
+- `run_workflow` só mostrou ganho num modelo e numa tarefa; em tarefa que cabe num contexto ou que um script resolve, ele só custa mais.
 - As lições são escritas por um modelo e podem estar erradas mesmo com evidência; revise com `hangar lessons` de tempos em tempos. O ganho medido até agora vem de um único caso.
 
 ## Estrutura
@@ -378,12 +399,12 @@ api_key_env = "MEU_GATEWAY_KEY"
 ```
 hangar/  agent.py (loop) · graph.py (workflows) · tools.py · toolcall.py (reparo/protocolo textual) · context.py (economia)
          llm.py · models.py (catálogo/tiers) · media.py (multimodal) · mcp.py · skills.py · machine.py · session.py · events.py
-         hooks.py (regras e plugins no loop) · lessons.py (lições entre sessões)
+         hooks.py (regras e plugins no loop) · lessons.py (lições entre sessões) · workflow.py (planos declarados pelo agente)
          studio.py + browser.py + pptx.py (peças visuais) · skills/ (5 skills embutidas)
          bridge.py (motor para outros programas, protocolo stdio)
          server.py + ui.html + flow.js (dashboard e grafo ao vivo) · cli.py
-bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas complexas) · tasks_studio.py (análise de dados com 6 entregáveis) · run_bench.py (Hangar × modelos, e Claude Code)
-tests/   test_core.py · mcp_vault_server.py
+bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas complexas) · tasks_studio.py (análise de dados com 6 entregáveis) · tasks_wide.py + tasks_audit.py (muitos itens independentes) · run_bench.py (Hangar × modelos, e Claude Code)
+tests/   test_core.py · test_workflow.py · mcp_vault_server.py
 docs/    PESQUISA.md · BENCHMARK.md
 ```
 
