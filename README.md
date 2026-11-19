@@ -50,12 +50,14 @@ De qualquer pasta: `python caminho/para/hh.py run "..."`.
 
 ## Estúdio: dashboards, apresentações, imagens e vídeo
 
-O agente produz peças visuais com quatro comandos que ele chama pelo `shell`, guiado por cinco skills embutidas
-(`data-analysis`, `dashboard`, `presentation`, `image-generation`, `motion-video`) carregadas só quando a tarefa pede.
+O agente produz peças visuais com comandos que ele chama pelo `shell`, guiado por seis skills embutidas
+(`data-analysis`, `dashboard`, `presentation`, `image-generation`, `motion-video`, `web-game`) carregadas só quando a
+tarefa pede. Uma skill pode declarar `triggers`: quando a tarefa bate, o harness manda carregá-la antes de tudo.
 São comandos, e não tools, de propósito: schema de tool é pago em toda chamada ao modelo; comando só custa quando é usado.
 
 ```bash
 python -m hangar studio screenshot pagina.html saida.png --width 1440 --height 900 --full   # captura + erros de console, overflow, texto cortado
+python -m hangar studio play index.html shots --do "wait 500; press Enter; hold ArrowRight 400; shot luta; expect G.hp < 100"   # joga a página
 python -m hangar studio video anim.html saida.mp4 --duration 15 --fps 30                    # HTML/three.js -> MP4, quadro a quadro
 python -m hangar studio image "prompt" assets/hero.png --aspect 16:9                        # modelo de imagem via OpenRouter
 python -m hangar studio pptx deck.json deck.pptx                                            # PowerPoint nativo, texto editável
@@ -63,6 +65,9 @@ python -m hangar studio pptx deck.json deck.pptx                                
 
 - **Navegador headless sem dependências** (`browser.py`): fala o protocolo DevTools do Chrome/Edge por um cliente WebSocket de ~60 linhas.
   O agente usa a captura com a tool `perceive` para olhar o que fez e corrigir.
+- **Jogar a página** (`studio play`): teclas, cliques, esperas, capturas e `expect` sobre o estado da página. Falha com erro de
+  console, tela vazia ou captura igual à anterior. É o check da skill `web-game`; e quem altera uma página e tenta encerrar
+  sem abri-la em navegador é mandado de volta uma vez.
 - **Vídeo determinístico**: a página define `window.hangarFrame(t)` e o renderizador posiciona cada quadro no instante exato (animações CSS
   são posicionadas sozinhas), captura e envia ao ffmpeg. Não é gravação de tela: máquina lenta não perde quadro.
 - **PPTX sem dependências** (`pptx.py`): escreve o XML do pacote direto; 8 layouts (capa, seção, KPIs, tópicos, imagem, duas colunas, citação,
@@ -395,6 +400,10 @@ api_key_env = "MEU_GATEWAY_KEY"
 - `web_search` usa a página HTML do DuckDuckGo (sem chave) e pode falhar; conecte um MCP de busca para uso sério.
 - `undo` cobre só o que passou por `write`/`edit`; o que um comando de shell alterou não é desfeito.
 - O bloqueio de "matar por nome" e a lista de comandos destrutivos são heurísticas por padrão de texto: um comando ofuscado passa.
+- A equipe automática escolhe o modelo mais barato que passou no benchmark de tarefas de código. Para uma construção grande e
+  visual (um jogo, um site inteiro) esse modelo entrega pouco: escolha o modelo com `-m`.
+- O "teste do olhar" da skill `web-game` é uma instrução, não uma trava: no teste real o agente encerrou com 5 de 8
+  personagens sem revisão visual, e disse isso no relatório.
 - `run_workflow` só mostrou ganho num modelo e numa tarefa; em tarefa que cabe num contexto ou que um script resolve, ele só custa mais.
 - As lições são escritas por um modelo e podem estar erradas mesmo com evidência; revise com `hangar lessons` de tempos em tempos. O ganho medido até agora vem de um único caso.
 
@@ -404,7 +413,7 @@ api_key_env = "MEU_GATEWAY_KEY"
 hangar/  agent.py (loop) · graph.py (workflows) · tools.py · toolcall.py (reparo/protocolo textual) · context.py (economia)
          llm.py · models.py (catálogo/tiers) · media.py (multimodal) · mcp.py · skills.py · machine.py · session.py · events.py
          hooks.py (regras e plugins no loop) · lessons.py (lições entre sessões) · workflow.py (planos declarados pelo agente)
-         studio.py + browser.py + pptx.py (peças visuais) · skills/ (5 skills embutidas)
+         studio.py + browser.py + pptx.py (peças visuais) · skills/ (6 skills embutidas)
          bridge.py (motor para outros programas, protocolo stdio)
          server.py + ui.html + flow.js (dashboard e grafo ao vivo) · cli.py
 bench/   tasks.py (7 tarefas rápidas) · tasks_hard.py + tinylang.py (4 tarefas complexas) · tasks_studio.py (análise de dados com 6 entregáveis) · tasks_wide.py + tasks_audit.py (muitos itens independentes) · run_bench.py (Hangar × modelos, e Claude Code)

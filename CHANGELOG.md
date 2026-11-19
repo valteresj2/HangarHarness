@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.7.9
+
+Veio de um teste real: pedir um jogo de luta 2D para navegador. A v0.7.8 entregou um arquivo minificado que ninguém
+abriu; as mudanças abaixo são o que faltou.
+
+- **`hangar studio play`**: joga uma página como uma pessoa. Passos em texto (`wait`, `press`, `hold`, `down`/`up`,
+  `seq`, `click`, `shot`, `eval`, `expect`), teclas pelo `code` do DOM. Salva as capturas e sai com erro quando há erro
+  de console, `expect` falso, tela vazia ou captura igual à anterior (as teclas não fizeram nada). A comparação é feita
+  numa miniatura decodificada em Python puro, sem dependência.
+- **Skill `web-game`**: como estruturar um jogo em arquivos legíveis, construir em fatias jogadas uma a uma, ganchos de
+  teste (`window.G`, parâmetros de URL, galeria de poses), direção de arte para gráficos desenhados em código e o
+  "teste do olhar" com `perceive`. O check da skill é o `studio play`.
+- **Página alterada e nunca aberta**: quem muda `.html` (ou o `.js`/`.css` de uma página da sessão) e tenta encerrar sem
+  rodar nenhum `hangar studio` é mandado de volta uma vez, em qualquer faixa de modelo. Só quando há Chrome ou Edge.
+- **Skill indicada pela tarefa**: uma skill pode declarar `triggers` no cabeçalho; quando a tarefa bate, o harness
+  acrescenta à mensagem a instrução de carregá-la antes de tudo (também ao retomar). Só o índice no prompt era ignorado.
+- **`run @arquivo.md` e `resume <id> @arquivo.md`**: tarefa longa lida de um arquivo UTF-8. `run -` passa a ler a
+  entrada em UTF-8 (no Windows os acentos chegavam quebrados) e recusa tarefa vazia em vez de chamar o modelo sem nada.
+- **Correções**
+  - `studio` não abria página local com `?parâmetros` ou `#âncora` (o `?` virava parte do nome do arquivo).
+  - `perceive` dizia "nenhum modelo configurado processa imagem" quando o modelo tinha respondido vazio. Agora tenta
+    de novo uma vez e relata a causa real.
+  - No Windows com Git Bash, `/tmp/x.png` e `/c/Users/...` escritos por um comando não eram achados por `read` e
+    `perceive`. As ferramentas de arquivo agora traduzem esses caminhos.
+  - `studio check` avisava "página sem texto" para página que só tem canvas.
+- **Medido**: mesma pasta, mesmo pedido de jogo. v0.7.8 com o modelo automático (gpt-6-luna): US$ 0,06, 7,5 min, 1
+  arquivo de 107 linhas minificadas, nunca aberto. Com as mudanças e claude-sonnet-5.5: US$ 4,89, cerca de 35 min em
+  duas etapas, 35 arquivos em `js/`, 23 críticas de captura, 8 lutadores jogados por teclado. O modelo mudou junto com o
+  harness, então a comparação não separa o efeito de cada um.
+
 ## v0.7.8
 
 - **Parar um subagente só**: cada subagente (do `run_workflow` e da ferramenta `task`) tem um nome que o host pode parar
