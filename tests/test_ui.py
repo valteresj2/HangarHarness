@@ -181,6 +181,8 @@ class ApiTests(UiBase):
 
         code, s = self.c.json(f"/api/sessions/{sid}/update", {"title": "Renomeada", "pinned": True, "permission": "readonly", "effort": "low", "workflows": True})
         self.assertEqual((s["title"], s["pinned"], s["permission"], s["effort"], s["workflows"]), ("Renomeada", True, "readonly", "low", True))
+        self.assertEqual(self.c.json(f"/api/sessions/{sid}/stop_agent", {"agent": "wf1"})[0], 200)     # one sub-agent, not the turn
+        self.assertEqual(self.c.json(f"/api/sessions/{sid}/stop_agent", {"agent": "../x"})[0], 400)
         self.llm.script = [{"tool": "write", "args": {"path": "b.txt", "content": "y"}}, {"text": "só planejei"}]
         self.c.json(f"/api/sessions/{sid}/send", {"text": "escreva b"})
         self.until(sid, lambda e: e["type"] == "assistant" and "planejei" in e.get("text", ""))

@@ -36,6 +36,62 @@ class WorkflowTests(unittest.TestCase):
     def parent(self, s):
         return SimpleNamespace(model=s.model, name="work")
 
+    PLAN = [{"id": "ler", "type": "map", "over": "glob:doc*.txt", "prompt": "leia {item}", "fields": {"valor": "o valor"}}]
+
+    def test_a_plan_cut_off_by_a_dead_process_is_picked_up_where_it_stopped(self):
+        def dies(q):                                     # the process goes away in the middle of the third item
+            if "doc3" in q:
+                raise SystemExit(1)
+            return '{"valor": 1}'
+        s = self.session(dies, workflow_parallel=1)
+        with self.assertRaises(SystemExit):
+            W.run(s, self.parent(s), self.PLAN, save="out.json")
+        self.assertTrue((s.dir / "workflow_pending.json").exists())
+
+        again = self.session(lambda q: '{"valor": 3}', workflow_parallel=1)
+        again.dir = s.dir                                # the same session, resumed by a new process
+        self.assertIn("steps: ler", W.hint(again))       # the model is told on its next turn
+        self.asked.clear()
+        out = W.run(again, self.parent(again), None, resume=True)
+        self.assertIn("3 of 3 items done", out)
+        self.assertEqual(len(self.asked), 1)             # only the item that had not finished
+        self.assertEqual(json.loads((self.tmp / "out.json").read_text(encoding="utf-8"))["doc3.txt"], {"valor": 3})
+        self.assertEqual((W.pending(again), W.hint(again)), (None, ""))
+        with self.assertRaises(W.PlanError):             # nothing left to resume
+            W.run(again, self.parent(again), None, resume=True)
+
+    def test_a_shell_step_that_prints_a_json_list_feeds_a_map(self):
+        s = self.session(lambda q: '{"valor": 1}')
+        plan = [{"id": "arquivos", "type": "shell", "command": "python -c \"import json; print(json.dumps(['doc1.txt', 'doc2.txt']))\""},
+                {"id": "ler", "type": "map", "over": "$arquivos", "prompt": "leia {item}", "fields": {"valor": "o valor"}}]
+        self.assertIn("2 of 2 items done", W.run(s, self.parent(s), plan))
+        self.assertEqual(sorted(q.split()[1] for q in self.asked), ["doc1.txt", "doc2.txt"])
+
+    def test_a_turn_the_user_stopped_leaves_nothing_to_resume(self):
+        from hangar.session import Stopped
+        s = self.session(lambda q: '{"valor": 1}')
+        s.abort.set()
+        with self.assertRaises(Stopped):
+            W.run(s, self.parent(s), self.PLAN)
+        self.assertIsNone(W.pending(s))
+
+    def test_one_sub_agent_can_be_stopped_and_the_others_go_on(self):
+        def answer(q):
+            if "doc1" in q:
+                s.stop_agent("wf2")                      # the user stops the second one while the first works
+            return '{"valor": 1}'
+        s = self.session(answer, workflow_parallel=1)
+        out = W.run(s, self.parent(s), self.PLAN)
+        self.assertIn("2 of 3 items done, 1 FAILED", out)
+        self.assertIn("doc2.txt", out)
+        self.assertIn("Cancelled", out)
+        s.bus.close()
+        ends = {e["agent"]: e["status"] for e in map(json.loads, (s.dir / "events.jsonl").read_text(encoding="utf-8").splitlines())
+                if e["type"] == "subagent_end"}
+        self.assertEqual(ends, {"wf1": "done", "wf2": "stopped", "wf3": "done"})
+        started = [e for e in map(json.loads, (s.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()) if e["type"] == "subagent"]
+        self.assertEqual([e["item"] for e in started], ["doc1.txt", "doc2.txt", "doc3.txt"])     # what the host shows next to the stop button
+
     def test_it_is_opt_in_and_only_for_the_main_agent(self):
         s = self.session(lambda q: "ok")
         names = lambda role, toolset="all": [t.name for t in T.select(s, toolset, "standard", role)]  # noqa: E731

@@ -364,6 +364,8 @@ Com `--workflows` (ou `workflows = true`), o agente principal ganha a ferramenta
 - **Resultados ficam em arquivos** (`workflow/runN/<id>.json` na pasta da sessão); o agente principal recebe só um resumo curto. Com `fields`, cada subagente tem de terminar com um objeto JSON com aqueles campos.
 - **Limites**: `workflow_max_calls` (40 subagentes por sessão) e `workflow_parallel` (6 ao mesmo tempo). Subagentes são somente leitura por padrão e não criam outros subagentes. Falha de um item não derruba os demais; passo `shell` que falha interrompe o plano.
 - **Cache**: repetir o plano não refaz itens já resolvidos com o mesmo modelo e o mesmo pedido.
+- **Retomada**: se o processo morrer no meio do plano, a sessão retomada avisa o modelo, que continua com `{"resume": true}`; só o que faltava é refeito.
+- **Parar um subagente só**: na UI, cada subagente em execução aparece acima da caixa de mensagem com um `×`; no bridge, `{"type":"stop_agent","agent":"wf2"}`. Só aquele item falha.
 
 Na UI, o botão `Workflows: ligado/desligado` do compositor liga e desliga por sessão; no modo bridge, `workflows` em `start` ou `set_options`.
 

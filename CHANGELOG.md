@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.7.8
+
+- **Parar um subagente só**: cada subagente (do `run_workflow` e da ferramenta `task`) tem um nome que o host pode parar
+  sozinho. Na UI, enquanto o plano roda, uma faixa acima da caixa de mensagem mostra cada subagente e o item em que
+  trabalha, com um `×`. Só aquele item falha; os outros seguem e o turno continua. No bridge:
+  `{"type":"stop_agent","agent":"wf2"}`, e o novo evento `subagent_end` informa o estado final (`done`, `failed`,
+  `stopped`). O evento `subagent` passa a trazer `item`.
+- **Retomar um plano cortado**: o plano em execução fica em `workflow_pending.json` na pasta da sessão. Se o processo
+  morrer no meio, o modelo é avisado no turno seguinte da sessão retomada e pode chamar `run_workflow` com
+  `{"resume": true}`; o cache refaz só o que faltava. Um turno interrompido pelo usuário não deixa nada a retomar.
+- **Correção**: no modo bridge (UI e app desktop), um passo `shell` do plano herdava a entrada do harness e nunca
+  terminava. Agora roda sem entrada, e o botão Parar mata o comando. Presente desde a v0.7.6.
+- **Correção**: um passo `shell` que imprime uma lista JSON alimenta o `map` seguinte item a item (antes virava um item só).
+- A retomada foi testada com morte simulada do processo, não com um processo morto de verdade.
+
 ## v0.7.7
 
 - **Botão de workflows na UI**: o compositor ganhou o botão `Workflows: ligado/desligado`, por sessão, ao lado de
