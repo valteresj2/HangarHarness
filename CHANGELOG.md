@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.7
+
+- **Botão de workflows na UI**: o compositor ganhou o botão `Workflows: ligado/desligado`, por sessão, ao lado de
+  Permissões; a paleta (`Ctrl+K`) tem o mesmo comando. Sessão nova começa com o que a configuração diz (`workflows`).
+  A troca vale na hora, ou no turno seguinte se o agente estiver trabalhando.
+- **Bridge**: `start` e `set_options` aceitam `workflows` (booleano), e o evento `options` informa o estado atual.
+
 ## v0.7.6
 
 - **Workflows dinâmicos, experimental e desligado por padrão** (`--workflows` ou `workflows = true`): o agente principal

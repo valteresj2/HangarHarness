@@ -365,6 +365,8 @@ Com `--workflows` (ou `workflows = true`), o agente principal ganha a ferramenta
 - **Limites**: `workflow_max_calls` (40 subagentes por sessão) e `workflow_parallel` (6 ao mesmo tempo). Subagentes são somente leitura por padrão e não criam outros subagentes. Falha de um item não derruba os demais; passo `shell` que falha interrompe o plano.
 - **Cache**: repetir o plano não refaz itens já resolvidos com o mesmo modelo e o mesmo pedido.
 
+Na UI, o botão `Workflows: ligado/desligado` do compositor liga e desliga por sessão; no modo bridge, `workflows` em `start` ou `set_options`.
+
 O que foi medido (em `docs/BENCHMARK.md`, Parte 5): numa tarefa de 24 contratos, o `gpt-6-luna` passou de 0/3 para 2/3 pelo dobro do custo. Os outros três modelos não ganharam nada: resolvem a tarefa escrevendo um script, ou ignoram a ferramenta. Por isso fica desligado por padrão.
 
 ## Configuração (`hangar.toml` no projeto ou `~/.hangar/config.toml`)

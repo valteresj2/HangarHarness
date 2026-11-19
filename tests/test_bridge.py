@@ -186,11 +186,14 @@ class BridgeTests(unittest.TestCase):
         b.until("turn_end")
         self.assertTrue((self.cwd / "a.txt").exists())                           # edits inside the folder need no approval
         self.assertFalse([e for e in b.all if e["type"] == "permission"])
-        b.send({"type": "set_options", "permission": "readonly"})
-        b.until("options")
+        names = lambda: [t["function"]["name"] for t in self.llm.requests[-1]["body"].get("tools", [])]
+        self.assertNotIn("run_workflow", names())                                # off unless the host or the config turns it on
+        b.send({"type": "set_options", "permission": "readonly", "workflows": True})
+        self.assertTrue(b.until("options")["workflows"])
         b.send({"type": "user", "text": "escreva outro"})
         b.until("turn_end")
         self.assertFalse((self.cwd / "b.txt").exists())                          # plan mode: nothing is written
+        self.assertIn("run_workflow", names())                                   # the switch reaches the next turn's tools
         self.assertIn("Plan mode", self.llm.requests[-1]["body"]["messages"][0]["content"])
 
     def test_interrupt_stops_the_stream(self):

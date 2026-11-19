@@ -179,8 +179,8 @@ class ApiTests(UiBase):
         end = self.until(sid, lambda e: e["type"] == "turn_end" and e["status"] == "interrupted", 15)
         self.assertEqual((end["status"], n >= 1), ("interrupted", True))
 
-        code, s = self.c.json(f"/api/sessions/{sid}/update", {"title": "Renomeada", "pinned": True, "permission": "readonly", "effort": "low"})
-        self.assertEqual((s["title"], s["pinned"], s["permission"], s["effort"]), ("Renomeada", True, "readonly", "low"))
+        code, s = self.c.json(f"/api/sessions/{sid}/update", {"title": "Renomeada", "pinned": True, "permission": "readonly", "effort": "low", "workflows": True})
+        self.assertEqual((s["title"], s["pinned"], s["permission"], s["effort"], s["workflows"]), ("Renomeada", True, "readonly", "low", True))
         self.llm.script = [{"tool": "write", "args": {"path": "b.txt", "content": "y"}}, {"text": "só planejei"}]
         self.c.json(f"/api/sessions/{sid}/send", {"text": "escreva b"})
         self.until(sid, lambda e: e["type"] == "assistant" and "planejei" in e.get("text", ""))
