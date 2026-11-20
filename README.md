@@ -45,6 +45,7 @@ De qualquer pasta: `python caminho/para/hh.py run "..."`.
 | Agente mata processos da máquina | Comandos que matam por **nome** (`taskkill /IM`, `pkill`, `killall`, `Stop-Process -Name`) são bloqueados: nos testes, modelos fortes rodaram `taskkill /F /IM python.exe` só para parar o próprio servidor. |
 | Contexto estoura | Compactação em 3 níveis com piso de orçamento e histerese (sem isso ela entrava em loop sumarizando a cada turno); plano, notas (`note`), arquivos alterados e processos vivos são reinjetados de forma exata após cada sumarização. |
 | Alteração indesejada | Backup do original de cada arquivo antes do primeiro `write`/`edit`; `hangar undo <id>` restaura (mudanças feitas via shell não são rastreadas). |
+| "Pronto" sem ter conferido | Travas de fim de turno, uma vez cada: página alterada e nunca aberta em navegador, programa criado e nunca executado, e resposta final que admite algo não testado (a própria lista volta como tarefa). |
 | Provedor fora do ar | `--fallback a,b`: depois das tentativas com backoff, troca para um modelo reserva. |
 | Resultado "pronto" mas errado | Workflow `verify` com `--verifier` mais forte: revisor de contexto limpo roda o código e rejeita; na segunda rejeição o executor é escalado. |
 
@@ -400,6 +401,8 @@ api_key_env = "MEU_GATEWAY_KEY"
 - `web_search` usa a página HTML do DuckDuckGo (sem chave) e pode falhar; conecte um MCP de busca para uso sério.
 - `undo` cobre só o que passou por `write`/`edit`; o que um comando de shell alterou não é desfeito.
 - O bloqueio de "matar por nome" e a lista de comandos destrutivos são heurísticas por padrão de texto: um comando ofuscado passa.
+- As travas de fim de turno ("você não conferiu", "nunca executou o que criou") são heurísticas de texto e de nome de arquivo:
+  um programa executado só como módulo importado por outro pode ser cobrado sem necessidade, uma vez.
 - A equipe automática escolhe o modelo mais barato que passou no benchmark de tarefas de código. Para uma construção grande e
   visual (um jogo, um site inteiro) esse modelo entrega pouco: escolha o modelo com `-m`.
 - O "teste do olhar" da skill `web-game` é uma instrução, não uma trava: no teste real o agente encerrou com 5 de 8

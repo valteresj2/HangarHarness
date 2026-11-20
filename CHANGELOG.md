@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.10
+
+Três lições do teste do jogo, generalizadas para qualquer entrega. Cada trava manda o agente de volta uma vez só e
+obedece ao mesmo interruptor das outras (`verify_nudge`).
+
+- **Resposta que admite trabalho não conferido não encerra**: quando a resposta final do agente principal diz que algo
+  não foi testado, verificado, rodado ou olhado (português e inglês), ele volta com a própria lista como tarefa. Na
+  segunda vez a resposta é aceita, com o motivo do que não dá para conferir naquela máquina. Não dispara com menos de
+  15% do orçamento ou a 5 passos do limite.
+- **Programa criado e nunca executado**: um arquivo novo de código (`.py`, `.js`, `.sh`, `.ps1`, `.ts`, entre outros)
+  que nenhum comando da sessão executou, nem pelo nome nem por uma suíte de testes ou build, manda o agente de volta,
+  em qualquer faixa de modelo. Antes, o aviso só existia para modelos fracos e médios e qualquer comando (até um `ls`)
+  o satisfazia.
+- **Todas as skills embutidas têm `triggers`**: `dashboard`, `data-analysis`, `image-generation`, `motion-video` e
+  `presentation` passam a ser indicadas pela própria tarefa, como a `web-game`.
+- Não medido em benchmark: são regras derivadas de uma tarefa só. A detecção de "não conferido" é por expressão regular
+  e pode errar nos dois sentidos.
+
 ## v0.7.9
 
 Veio de um teste real: pedir um jogo de luta 2D para navegador. A v0.7.8 entregou um arquivo minificado que ninguém

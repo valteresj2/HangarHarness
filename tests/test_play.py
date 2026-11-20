@@ -147,6 +147,58 @@ class PageGateTests(unittest.TestCase):
         self.assertEqual(sum("never opened it in a browser" in m for m in seen), 1)        # asked once, and a strong model too
         self.assertEqual(self.s.page_unseen, "")
 
+    def scripted(self, replies):
+        """A strong model that answers with `replies` in order: a dict is one tool call, a string a final answer."""
+        from hangar.agent import Agent
+        from hangar.llm import Reply
+        self.s.cfg["tiers"]["forte/x"] = "strong"
+        self.s.cfg.setdefault("model_info", {})["forte/x"] = {"tools": True}
+        seen, n = [], {"i": 0}
+
+        def chat(model, messages, **k):
+            seen.append(json.dumps(messages[-1], ensure_ascii=False, default=str))
+            step = replies[min(n["i"], len(replies) - 1)]
+            n["i"] += 1
+            if isinstance(step, str):
+                return Reply(content=step, finish="stop", usage={"prompt": 5, "completion": 5, "cost": 0.0}, model=model)
+            r = Reply(content="", finish="tool_calls", usage={"prompt": 5, "completion": 5, "cost": 0.0}, model=model)
+            r.tool_calls = [{"id": f"c{n['i']}", "name": step["tool"], "arguments": json.dumps(step["args"])}]
+            return r
+        self.s.llm.chat = chat
+        return Agent(self.s, model="forte/x", name="w"), seen
+
+    def test_a_program_written_and_never_run_sends_the_agent_back_once(self):
+        agent, seen = self.scripted([{"tool": "write", "args": {"path": "conta.py", "content": "print(2 + 2)\n"}}, "pronto",
+                                     {"tool": "shell", "args": {"command": "python conta.py"}}, "rodei: 4"])
+        self.assertEqual(agent.run("crie conta.py"), "rodei: 4")
+        self.assertEqual(sum("no command in this session ever executed" in m for m in seen), 1)
+        self.assertEqual(self.s.code_new, set())
+        agent, seen = self.scripted([{"tool": "write", "args": {"path": "util.py", "content": "def f():\n    return 1\n"}},
+                                     {"tool": "shell", "args": {"command": "python -m pytest -q"}}, "feito"])
+        agent.run("crie util.py com teste")                                                # a test suite counts as running it
+        self.assertFalse(any("ever executed" in m for m in seen))
+        self.assertEqual(T.ran_code({"util.py", "outro.py"}, "python -m pkg.util --help"), {"util.py"})
+        self.assertEqual(T.ran_code({"util.py"}, "ls -la"), set())
+
+    def test_an_answer_that_admits_unchecked_work_is_sent_back_once(self):
+        from hangar.agent import unverified
+        self.assertEqual(unverified("Tudo testado: 8 testes passam.\nCorrigi o bug."), [])
+        self.assertEqual(len(unverified("- Não joguei a luta com o teclado.\n- The Windows path was not tested.\n- ok")), 2)
+        agent, seen = self.scripted(["Fiz a mudança, mas não testei o caso de borda.", "Testei agora: o caso de borda passa."])
+        self.assertEqual(agent.run("ajuste o cálculo"), "Testei agora: o caso de borda passa.")
+        self.assertEqual(sum("your own answer says part of the work was not checked" in m for m in seen), 1)
+        agent, seen = self.scripted(["Não testei no macOS: não há um aqui.", "Não testei no macOS: não há um aqui."])
+        self.assertIn("macOS", agent.run("porte para macOS"))                              # still unverifiable: accepted the second time
+        self.assertEqual(sum("was not checked" in m for m in seen), 1)
+
+    def test_every_builtin_skill_can_be_pointed_at_by_the_task(self):
+        found = skills.discover(self.tmp)
+        for task, name in (("monte um dashboard de vendas", "dashboard"), ("faça uma apresentação para a diretoria", "presentation"),
+                           ("faça a análise de dados do csv", "data-analysis"), ("gere uma imagem de capa", "image-generation"),
+                           ("crie um vídeo animado de 10 s", "motion-video")):
+            self.assertIn(f"`{name}`", skills.suggest(found, task), task)
+        self.assertEqual(skills.suggest(found, "corrija o teste que falha em parser.py"), "")
+
     def test_scripts_of_a_page_count_as_the_page(self):
         (self.tmp / "js").mkdir()
         self.s.touched(self.tmp / "js" / "main.js")

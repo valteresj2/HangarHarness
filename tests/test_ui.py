@@ -267,6 +267,7 @@ class WorkflowTests(UiBase):
     def test_a_verify_run_goes_through_the_reviewer_and_back(self):
         cwd = self.offline_project()
         self.llm.script = [{"tool": "write", "args": {"path": "soma.py", "content": "def soma(a, b):\n    return a - b\n"}}, {"text": "Feito."},
+                           {"text": "Feito."},                                           # sent back once: soma.py was created and never run
                            {"text": 'Li o arquivo.\n{"verdict": "revise", "feedback": "soma subtrai em vez de somar"}'},
                            {"tool": "write", "args": {"path": "soma.py", "content": "def soma(a, b):\n    return a + b\n"}}, {"text": "Corrigido."},
                            {"text": '{"verdict": "approve", "feedback": ""}'}]
