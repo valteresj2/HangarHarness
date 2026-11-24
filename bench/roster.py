@@ -15,6 +15,7 @@ of the tiers that role needs, with at least --min-runs runs per task; inside a r
 
   role                         needs                         ordered by cost per solved task of
   worker                       core + media + hard           core + media + hard
+                               + frontier
   light, helper                core                          core
   verifier                     core + hard                   core + hard
   deep, planner, escalation    core + hard + frontier        frontier
@@ -36,7 +37,7 @@ sys.path.insert(0, str(ROOT))
 TIERS = {"core": ["bugfix", "feature", "ask", "mcp"], "media": ["image", "audio", "video"],
          "hard": ["kvstore", "pipeline", "refactor"], "frontier": ["tinylang"]}
 RULES = {  # role: (tiers the model must clear, tiers whose cost orders the role)
-    "worker": (["core", "media", "hard"], ["core", "media", "hard"]),
+    "worker": (["core", "media", "hard", "frontier"], ["core", "media", "hard"]),
     "light": (["core"], ["core"]),
     "deep": (["core", "hard", "frontier"], ["frontier"]),
     "planner": (["core", "hard", "frontier"], ["frontier"]),
@@ -56,7 +57,9 @@ def collect(files: list[str]) -> dict:
             rows = json.loads(Path(f).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        for r in rows:
+        for r in rows if isinstance(rows, list) else []:  # other benchmarks (memory) save another shape
+            if not isinstance(r, dict):
+                continue
             if r.get("harness") != "hangar" or r.get("ok") is None or r.get("workflow") != "loop" or r.get("label") != r.get("model"):
                 continue
             t = out.setdefault(r["model"], {}).setdefault(r["task"], {"runs": 0, "solved": 0, "cost": 0.0})

@@ -284,7 +284,7 @@ class WorkflowTests(UiBase):
         self.assertEqual({m for r, m in team.items() if r != "perception"}, {"fake/model"})
         self.assertEqual(self.c.json("/api/team?cwd=" + urllib.request.quote(str(cwd)))[1]["team"][0], {
             "role": "worker", "model": "fake/model", "evidence": "",                   # a private provider: nothing was benchmarked
-            "why": "faz a tarefa: o mais barato que resolveu todas as tarefas do dia a dia, de mídia e difíceis"})
+            "why": "faz a tarefa: o mais barato que resolveu todas as tarefas, inclusive a mais difícil"})
         end = next(e for e in evs if e["type"] == "session_end")
         self.assertEqual({r["role"] for r in end["by_role"]}, {"worker", "verifier"})          # the bill says who spent it
         self.assertEqual(sum(r["calls"] for r in end["by_role"]), end["llm_calls"])

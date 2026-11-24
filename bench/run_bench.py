@@ -72,7 +72,7 @@ def run_hangar(model: str, task: str, base: Path, workflow: str, planner: str, l
     return {**row, "workdir": str(d), "status": res["status"], "ok": bool(ok), "detail": detail, "cost": res["cost"], "prompt": res["prompt"],
             "cached": res["cached"], "completion": res["completion"], "llm_calls": res["llm_calls"], "tool_calls": res["tool_calls"],
             "tool_errors": res["tool_errors"], "questions": res["questions"], "duration_s": res["duration_s"], "session": res["session"],
-            "by_model": res["by_model"]}
+            "by_model": res["by_model"], "aids": res.get("aids") or {}}
 
 
 def run_claude(task: str, base: Path, model: str) -> dict:

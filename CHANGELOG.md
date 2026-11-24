@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.7.11
+
+A equipe automática deixou de escolher o executor só pelo preço.
+
+- **Executor precisa resolver a tarefa mais difícil**: antes bastava resolver as tarefas do dia a dia, de mídia e
+  difíceis, e o mais barato ganhava (`openai/gpt-6-luna`, que resolveu `tinylang` em 1 de 3 execuções). Agora o
+  executor também precisa ter resolvido `tinylang` em todas as execuções.
+- **Reforço nunca é o próprio executor**: escolhe o seguinte mais caro na tarefa mais difícil. Antes, com executor e
+  reforço iguais, a equipe ficava sem reforço.
+- **Nove modelos novos medidos** (2026-11-23). Três resolveram as 11 tarefas em duas execuções cada e entraram na
+  equipe: `tencent/hy4-flash`, `deepseek/deepseek-v4.1-flash` e `xiaomi/mimo-v2.6-flash`. O `hy4-flash` é o mais barato
+  em todos os papéis que disputa (US$ 0,0012 por tarefa resolvida, contra US$ 0,0026 do `claude-haiku-5.5`) e passa a
+  ser executor, leve, profundo, planejador e auxiliar; o `claude-haiku-5.5` vira reforço e o revisor segue de outro
+  fornecedor (`openai/gpt-6-luna`).
+- **Imagens vão para um modelo de visão** (`vision_model`, padrão `deepseek/deepseek-v4.1-flash`): `perceive` e os
+  testes do olhar deixam de gastar o preço do modelo de trabalho em cada captura. Áudio e vídeo seguem no modelo de
+  percepção. `vision_model = ""` volta ao comportamento anterior.
+- `bench/roster.py` não quebra mais com os arquivos de resultado do benchmark de memória.
+
+Medir o que cada peça do harness acrescenta, em vez de supor.
+
+- **O resumo da execução separa o que foi oferecido do que foi usado** (`aids` em `summary.json` e no `--json`):
+  habilidades apontadas pelo harness, habilidades de fato carregadas, lições mostradas e quantas saídas longas foram
+  para arquivo. Uma tarefa resolvida não prova nada sobre uma habilidade que a execução nunca abriu.
+- **`--no-skills`** (`skills = false`): roda sem índice, sugestão nem trava de habilidades. Junto com `--no-lessons` e
+  `--no-memory`, permite desligar uma peça por vez no benchmark.
+- **`python bench/compare.py <resultados>`**: tabela por variante com tarefas resolvidas, custo e tempo médios, e em
+  quantas execuções uma habilidade foi sugerida e carregada.
+- **Sub-agente que parou no limite avisa quem o chamou**: quando um sub-agente esgota passos ou orçamento, ou entra em
+  repetição, o relatório volta marcado como "não terminou" e o evento registra `incomplete`. Antes voltava como
+  concluído. Relatório longo de sub-agente vai para arquivo com início e fim no contexto, em vez de ser cortado.
+
 ## v0.7.10
 
 Três lições do teste do jogo, generalizadas para qualquer entrega. Cada trava manda o agente de volta uma vez só e

@@ -191,6 +191,27 @@ class PageGateTests(unittest.TestCase):
         self.assertIn("macOS", agent.run("porte para macOS"))                              # still unverifiable: accepted the second time
         self.assertEqual(sum("was not checked" in m for m in seen), 1)
 
+    def test_a_sub_agent_that_ran_out_says_so_to_whoever_started_it(self):
+        echo = {"tool": "shell", "args": {"command": "echo oi"}}
+        agent, seen = self.scripted([{"tool": "task", "args": {"prompt": "conte os arquivos"}}] + [echo] * 5 + ["parei no meio", "fim"])
+        self.assertEqual(agent.run("delegue a contagem"), "fim")
+        back = next(m for m in seen if "did NOT finish" in m)                              # the caller is told it is a status
+        self.assertIn("parei no meio", back)
+        ends = [json.loads(line) for line in (self.s.dir / "events.jsonl").read_text(encoding="utf-8").splitlines() if '"subagent_end"' in line]
+        self.assertEqual(ends[-1]["status"], "incomplete")
+
+    def test_the_summary_tells_offered_aids_from_used_ones(self):
+        agent, _ = self.scripted(["pronto"])
+        agent.run("faça um jogo de plataforma para navegador")
+        aids = self.s.aids()
+        self.assertEqual((aids["skills_suggested"], aids["skills_loaded"]), (["web-game"], []))    # pointed at, never loaded
+        agent, _ = self.scripted([{"tool": "skill", "args": {"name": "web-game"}}, "pronto"])
+        agent.run("continue o jogo")
+        self.assertEqual(self.s.aids()["skills_loaded"], ["web-game"])
+        bare = Session({**self.s.cfg, "skills": False}, self.tmp, model="forte/x")              # --no-skills: nothing to offer
+        self.addCleanup(bare.bus.close)
+        self.assertEqual(bare.skills, {})
+
     def test_every_builtin_skill_can_be_pointed_at_by_the_task(self):
         found = skills.discover(self.tmp)
         for task, name in (("monte um dashboard de vendas", "dashboard"), ("faça uma apresentação para a diretoria", "presentation"),

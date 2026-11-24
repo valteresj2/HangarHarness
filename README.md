@@ -82,14 +82,15 @@ Com `model = "auto"` (o padrão do app web; no CLI, `hangar run -m auto "…"`) 
 
 | Papel | Modelo | Por quê | Evidência |
 |---|---|---|---|
-| executor | `openai/gpt-6-luna` | o mais barato que resolveu todas as tarefas do dia a dia, de mídia e difíceis | 50/50 execuções · US$ 0.0015 por tarefa resolvida |
-| sub-agente leve (`level: light`) | `openai/gpt-6-luna` | busca, leitura e resumo | 22/22 execuções · US$ 0.0009 por tarefa resolvida |
-| sub-agente profundo (`level: deep`) | `anthropic/claude-haiku-5.5` | o mais barato que resolveu a tarefa mais difícil | 31/31 execuções · US$ 0.0234 na tarefa mais difícil |
-| planejador (`pev`) | `anthropic/claude-haiku-5.5` | o plano orienta todo o resto | 31/31 execuções · US$ 0.0234 na tarefa mais difícil |
-| revisor (`verify`, `pev`) | `anthropic/claude-haiku-5.5` | de outro fornecedor que o executor: não divide os mesmos pontos cegos | 28/28 execuções · US$ 0.0028 por tarefa resolvida |
-| reforço | `anthropic/claude-haiku-5.5` | assume a conversa só quando o executor trava | 31/31 execuções · US$ 0.0234 na tarefa mais difícil |
-| auxiliar | `openai/gpt-6-luna` | resumo de contexto e lições | 22/22 execuções · US$ 0.0009 por tarefa resolvida |
-| percepção | `meta/muse-ember` | imagem, áudio e vídeo | 9/9 execuções · US$ 0.0016 por tarefa resolvida |
+| executor | `tencent/hy4-flash` | o mais barato que resolveu todas as tarefas, inclusive a mais difícil | 22/22 execuções · US$ 0.0012 por tarefa resolvida |
+| sub-agente leve (`level: light`) | `tencent/hy4-flash` | busca, leitura e resumo | 8/8 execuções · US$ 0.0004 por tarefa resolvida |
+| sub-agente profundo (`level: deep`) | `tencent/hy4-flash` | o mais barato que resolveu a tarefa mais difícil | 16/16 execuções · US$ 0.0108 na tarefa mais difícil |
+| planejador (`pev`) | `tencent/hy4-flash` | o plano orienta todo o resto | 16/16 execuções · US$ 0.0108 na tarefa mais difícil |
+| revisor (`verify`, `pev`) | `openai/gpt-6-luna` | de outro fornecedor que o executor: não divide os mesmos pontos cegos | 35/35 execuções · US$ 0.0017 por tarefa resolvida |
+| reforço | `anthropic/claude-haiku-5.5` | assume a conversa só quando o executor trava: o seguinte mais caro que o executor na tarefa mais difícil | 46/46 execuções · US$ 0.0234 na tarefa mais difícil |
+| auxiliar | `tencent/hy4-flash` | resumo de contexto e lições | 8/8 execuções · US$ 0.0004 por tarefa resolvida |
+| percepção | `meta/muse-ember` | áudio e vídeo, e imagem quando não há modelo de visão | 9/9 execuções · US$ 0.0016 por tarefa resolvida |
+| visão (`vision_model`) | `deepseek/deepseek-v4.1-flash` | descreve imagens antes de qualquer outro modelo; escolha fixa na configuração, não vem do benchmark | — |
 
 A equipe não é escrita à mão: `python bench/roster.py` lê os resultados do benchmark e grava `hangar/roster.json`, que o
 roteador usa. Um modelo só entra num papel se resolveu **todas** as execuções das tarefas que o papel exige, com pelo
@@ -97,7 +98,7 @@ menos duas execuções por tarefa; dentro do papel, a ordem é o custo por taref
 
 | Papel | Precisa ter resolvido | Ordenado pelo custo em |
 |---|---|---|
-| executor | dia a dia + mídia + difíceis | as mesmas |
+| executor | dia a dia + mídia + difíceis + a mais difícil (`tinylang`) | dia a dia + mídia + difíceis |
 | leve, auxiliar | dia a dia | dia a dia |
 | revisor | dia a dia + difíceis | as mesmas |
 | profundo, planejador, reforço | dia a dia + difíceis + a mais difícil (`tinylang`) | a mais difícil |
@@ -223,6 +224,7 @@ hangar memory                      # lista os fatos deste projeto
 hangar memory rm test-command      # apaga um
 hangar memory clear                # apaga todos
 hangar run "…" --no-memory         # esta execução não lê nem escreve memória
+hangar run "…" --no-skills         # esta execução roda sem habilidades (para medir o que elas acrescentam)
 ```
 
 No app web, os fatos aparecem no painel **Harness**, com botão para esquecer. Sub-agentes, planejador e revisor leem a
@@ -383,6 +385,7 @@ O que foi medido (em `docs/BENCHMARK.md`, Parte 5): numa tarefa de 24 contratos,
 model = "openai/gpt-6-luna"
 planner_model = "anthropic/claude-sonnet-5.5"
 perception_model = "meta/muse-ember"
+vision_model = "deepseek/deepseek-v4.1-flash"   # quem descreve imagens; "" = o modelo de trabalho, depois o de percepção
 max_cost_usd = 2.0
 permission = "auto"        # auto | ask | readonly
 

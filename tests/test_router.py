@@ -109,30 +109,53 @@ class RouterTests(unittest.TestCase):
         self.assertNotIn("variante/v", data)                                               # only plain loop runs count
         roles = gen.build(data, 2, {"sentidos/p": ["text", "image", "audio", "video"], "barato/x": ["text", "image"]})
         order = {r: [x["model"] for x in v] for r, v in roles.items()}
-        self.assertEqual(order["worker"], ["barato/x", "medio/z", "forte/y"])               # cheapest that cleared core, media and hard
+        self.assertEqual(order["worker"], ["medio/z", "forte/y"])                           # cheapest that cleared everything, the hardest task too
         self.assertEqual(order["deep"], ["medio/z", "forte/y"])                             # the cheap one failed the hardest task
         self.assertEqual(order["deep"], order["escalation"])
         self.assertEqual(order["light"][0], "barato/x")
         self.assertNotIn("quebra/w", order["light"])                                        # one failure in a needed tier keeps a model out
         self.assertEqual(order["perception"], ["sentidos/p"])                               # must take image, audio and video itself
-        self.assertEqual((roles["worker"][0]["solved"], roles["worker"][0]["runs"], roles["worker"][0]["cost_per_solved"]), (20, 20, 0.001))
+        self.assertEqual((roles["worker"][0]["solved"], roles["worker"][0]["runs"], roles["worker"][0]["cost_per_solved"]), (22, 22, 0.005))
         self.assertEqual(gen.build(gen.collect([str(d / "a.json")]), 2, {})["worker"], [])  # one run per task is not evidence yet
 
         doc = {"generated": "2026-11-13", "roles": roles}
         (d / "mine.json").write_text(json.dumps(doc), encoding="utf-8")
         (d / "broken.json").write_text(json.dumps({"roles": {"worker": roles["worker"]}}), encoding="utf-8")
         mine = router.load([d / "nao-existe.json", d / "broken.json", d / "mine.json"])        # the first complete file wins
-        self.assertEqual((mine["roles"]["worker"][0], mine["source"]), ("barato/x", str(d / "mine.json")))
+        self.assertEqual((mine["roles"]["worker"][0], mine["source"]), ("medio/z", str(d / "mine.json")))
         self.assertEqual(router.load([d / "broken.json"])["source"], "builtin")
         t = router.team(self.cfg(), StubCatalog({}), mine)
-        self.assertEqual((t["worker"], t["deep"], t["verifier"]), ("barato/x", "medio/z", "medio/z"))    # reviewer from another vendor
+        self.assertEqual((t["worker"], t["deep"], t["verifier"]), ("medio/z", "medio/z", "barato/x"))    # reviewer from another vendor
+        self.assertEqual(t["escalation"], "forte/y")                                       # never a hand-over to the worker itself
         row = router.describe(t, mine)[0]
-        self.assertEqual(row["evidence"], "20/20 execuções resolvidas · US$ 0.0010 por tarefa resolvida")
+        self.assertEqual(row["evidence"], "22/22 execuções resolvidas · US$ 0.0050 por tarefa resolvida")
 
         shipped = router.load([router.SHIPPED])                                            # the file we ship is complete and current
         self.assertEqual(shipped["source"], str(router.SHIPPED))
         self.assertEqual(set(shipped["roles"]), set(router.ROLES))
         self.assertTrue(all(shipped["evidence"][r][shipped["roles"][r][0]]["runs"] >= 2 for r in router.ROLES))
+
+    def test_an_image_goes_to_the_vision_model_first(self):
+        from types import SimpleNamespace as NS
+        from hangar import media
+        d = Path(tempfile.mkdtemp(prefix="hangar_eyes_"))
+        (d / "a.png").write_bytes(b"PNG" + b"0" * 64)
+        (d / "a.mp3").write_bytes(b"ID3" + b"0" * 64)
+        asked = []
+
+        def chat(model, msgs, **kw):
+            asked.append(model)
+            return NS(content="visto por " + model)
+
+        def session(**cfg):
+            return NS(model="forte/trabalho", perception_cache={}, add_usage=lambda *a: None, llm=NS(chat=chat),
+                      cfg={"perception_model": "ouve/tudo", "vision_model": "olho/barato", **cfg},
+                      catalog=NS(info=lambda m: {"modalities": ["text", "image", "audio"] if m == "ouve/tudo" else ["text", "image"]}))
+
+        self.assertEqual(media.describe(session(), d / "a.png", "o que tem?"), "visto por olho/barato")
+        self.assertEqual(media.describe(session(vision_model=""), d / "a.png", "o que tem?"), "visto por forte/trabalho")   # "" = as before
+        self.assertEqual(media.describe(session(), d / "a.mp3", "o que diz?"), "visto por ouve/tudo")      # sound is not its job
+        self.assertEqual(asked, ["olho/barato", "forte/trabalho", "ouve/tudo"])
 
     def test_the_bill_says_which_role_spent_what(self):
         cwd = Path(tempfile.mkdtemp(prefix="hangar_bill_")).resolve()
